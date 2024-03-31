@@ -6,8 +6,8 @@ from viktor.external.word import WordFileTag, render_word_file
 from viktor.utils import convert_word_to_pdf
 from viktor.views import PDFResult, PDFView
 
-from ..helper import pyutils
-from .parametrization import Parametrization
+from app.auto_invoice.parametrization import Parametrization
+from app.helper import pyutils
 
 
 class Controller(ViktorController):
@@ -22,10 +22,10 @@ class Controller(ViktorController):
         """
         # TODO: construct list of rows containing payment data (custumer name, amount, date, tax rate etc.)
         components = [
-            WordFileTag("invoice_date", params.invoiceDate),
-            WordFileTag("expiration_date", params.expirationDate),
-            WordFileTag("invoice_number", params.invoiceNumber),
-            WordFileTag("invoice_period", params.invoicePeriod),
+            WordFileTag("invoiceDate", str(params.invoiceStep.invoiceDate)),
+            WordFileTag("expirationDate", str(params.invoiceStep.expirationDate)),
+            WordFileTag("invoiceNumber", params.invoiceStep.invoiceNumber),
+            WordFileTag("invoicePeriod", params.invoiceStep.invoicePeriod),
         ]
 
         return components
@@ -34,15 +34,14 @@ class Controller(ViktorController):
         """
         Render invoice using template with most up to date input
         """
-        components = self.gatherInvoiceComponents(params)
         template_dir = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
-        with open(template_dir, "w") as template:
-            result = render_word_file(template, components)
+        with open(template_dir, "rb") as template:
+            result = render_word_file(template, self.gatherInvoiceComponents(params))
 
         return result
 
     @PDFView("PDF viewer", duration_guess=5)
-    def pdf_view(self, params, **kwargs):
+    def viewInvoice(self, params, **kwargs):
         word_file = self.renderInvoice(params)
 
         with word_file.open_binary() as f1:

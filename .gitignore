@@ -1,1 +1,5 @@
+# virtualenv
 venv
+
+# docx savefile
+app/lib/~$*.docx
