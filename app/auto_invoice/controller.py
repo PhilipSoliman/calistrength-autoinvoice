@@ -1,11 +1,20 @@
 from pathlib import Path
+from pprint import pprint
 
 from viktor import ViktorController
 from viktor.core import File, Storage
+from viktor.errors import UserError
+from viktor.external.spreadsheet import (
+    SpreadsheetCalculation,
+    SpreadsheetCalculationInput,
+    SpreadsheetResult,
+)
 from viktor.external.word import WordFileTag, render_word_file
+from viktor.result import SetParamsResult
 from viktor.utils import convert_word_to_pdf
 from viktor.views import PDFResult, PDFView
 
+from app.auto_invoice.definitions import convertExcelDate, convertExcelFloat
 from app.auto_invoice.parametrization import Parametrization
 from app.helper import pyutils
 
@@ -57,16 +66,48 @@ class Controller(ViktorController):
         storage = Storage()
         storage.set(self.getStorageKey(params), data=word_file, scope="workspace")
 
-    def loadInvoice(self, params, **kwargs) -> File:
+    @staticmethod
+    def loadInvoice(invoiceNumber: str) -> File:
         """
         Load invoice from storage
         """
         storage = Storage()
-        word_file = storage.get(self.getStorageKey(params), scope="workspace")
+        word_file = storage.get(invoiceNumber, scope="workspace")
         return word_file
 
-    def getStorageKey(self, params, **kwargs) -> str:
+    def getFinanceData(self, params, **kwargs) -> SpreadsheetResult:
         """
-        Generate storage key for the invoice
+        Load finance data from uploaded excel file, also pass any inputs from user
         """
-        return params.client_name + "_" + params.invoice_number
+        # TODO: move finance data from params to storage to prevent slow app in the future
+        # example of inputs
+        inputs = [
+            SpreadsheetCalculationInput("clientName", params.invoiceStep.clientName)
+        ]
+        financeSheet = SpreadsheetCalculation(
+            params.uploadStep.financeSheet.file, inputs
+        )
+        financeData = financeSheet.evaluate(include_filled_file=False).values
+        for itemKey, dataString in financeData.items():
+            # get values from string
+            if isinstance(dataString, str):
+                values = dataString.split(";")
+            else:
+                UserError("Data in finance sheet should be string")
+
+            # assign values to financeData dict and do some type conversion
+            if itemKey in ["clients", "availableClients"]:
+                financeData[itemKey] = values[1:]
+            elif itemKey in ["pricesIncl", "pricesExcl"]:
+                financeData[itemKey] = [
+                    convertExcelFloat(value) for value in values[1:]
+                ]
+            elif itemKey == "invoiceDates":
+                financeData[itemKey] = [
+                    convertExcelDate(int(value)) for value in values[1:]
+                ]
+            else:
+                UserError(f"Unknown key {itemKey} in finance data sheet")
+
+        pprint(params)
+        return SetParamsResult({"uploadStep": {"financeData": financeData}})

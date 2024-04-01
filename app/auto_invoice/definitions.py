@@ -1,3 +1,5 @@
+import datetime
+
 INVOICE_PERIODS = [
     "1 januari - 31 januari",
     "1 februari - 28 februari",
@@ -14,3 +16,27 @@ INVOICE_PERIODS = [
 ]
 
 INVOICE_YEARS = [str(year) for year in range(2024, 2030)]
+
+
+def getAvailableClients(params, **kwargs):
+    """
+    Get list of available clients from finance data
+    """
+    return params.uploadStep.financeData["availableClients"]
+
+
+def convertExcelDate(excelDateNumber: str) -> str:
+    """
+    Convert Excel date number to human readable date
+    """
+    # TODO: implement
+    # baseDateExcel = datetime.datetime(1900, 1, 1)
+    # delta = datetime.timedelta(days=dateNumber - 2)
+    return
+
+
+def convertExcelFloat(excelFloat: str) -> float:
+    """
+    convert Excel-style float to regular float
+    """
+    return float(excelFloat.replace(",", "."))
