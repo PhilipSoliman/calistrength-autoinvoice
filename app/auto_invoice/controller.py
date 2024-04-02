@@ -1,7 +1,9 @@
+import json
 from pathlib import Path
 from pprint import pprint
 
 from viktor import ViktorController
+from viktor.api_v1 import FileResource
 from viktor.core import File, Storage
 from viktor.errors import UserError
 from viktor.external.spreadsheet import (
@@ -10,7 +12,7 @@ from viktor.external.spreadsheet import (
     SpreadsheetResult,
 )
 from viktor.external.word import WordFileTag, render_word_file
-from viktor.result import SetParamsResult
+from viktor.result import DownloadResult, SetParamsResult
 from viktor.utils import convert_word_to_pdf
 from viktor.views import PDFResult, PDFView
 
@@ -52,10 +54,8 @@ class Controller(ViktorController):
     @PDFView("PDF viewer", duration_guess=5)
     def viewInvoice(self, params, **kwargs):
         word_file = self.renderInvoice(params)
-
         with word_file.open_binary() as f1:
             pdf_file = convert_word_to_pdf(f1)
-
         return PDFResult(file=pdf_file)
 
     def saveInvoice(self, params, **kwargs) -> None:
@@ -75,6 +75,19 @@ class Controller(ViktorController):
         word_file = storage.get(invoiceNumber, scope="workspace")
         return word_file
 
+    def downloadInvoice(self, params, **kwargs):
+        word_file = self.renderInvoice(params)
+        fn = f"invoice-{self.getStorageKey(params)}.pdf"
+        with word_file.open_binary() as f1:
+            pdf_file = convert_word_to_pdf(f1)
+        return DownloadResult(pdf_file, fn)
+
+    def getStorageKey(self, params) -> str:
+        """
+        Get storage key for invoice
+        """
+        return f"{params.invoiceStep.clientName}-{params.invoiceStep.invoiceNumber}"
+
     def getFinanceData(self, params, **kwargs) -> SpreadsheetResult:
         """
         Load finance data from uploaded excel file, also pass any inputs from user
@@ -84,16 +97,15 @@ class Controller(ViktorController):
         inputs = [
             SpreadsheetCalculationInput("clientName", params.invoiceStep.clientName)
         ]
-        financeSheet = SpreadsheetCalculation(
-            params.uploadStep.financeSheet.file, inputs
-        )
+        financeFile = Controller.obtainFileFromResource(params.uploadStep.financeSheet)
+        financeSheet = SpreadsheetCalculation(financeFile, inputs)
         financeData = financeSheet.evaluate(include_filled_file=False).values
         for itemKey, dataString in financeData.items():
             # get values from string
             if isinstance(dataString, str):
                 values = dataString.split(";")
             else:
-                UserError("Data in finance sheet should be string")
+                raise UserError("Data values in finance sheet should be strings")
 
             # assign values to financeData dict and do some type conversion
             if itemKey in ["clients", "availableClients"]:
@@ -107,7 +119,18 @@ class Controller(ViktorController):
                     convertExcelDate(int(value)) for value in values[1:]
                 ]
             else:
-                UserError(f"Unknown key {itemKey} in finance data sheet")
+                raise UserError(f"Unknown key {itemKey} in finance data sheet")
 
-        pprint(params)
-        return SetParamsResult({"uploadStep": {"financeData": financeData}})
+        return SetParamsResult({"financeData": financeData})
+
+    @staticmethod
+    def obtainFileFromResource(fileResource: FileResource) -> File:
+        """
+        Obtain file from params
+        """
+        file = None
+        try:
+            file = fileResource.file
+        except AttributeError:
+            raise UserError(f"No finance (*.xlsx) file found.")
+        return file

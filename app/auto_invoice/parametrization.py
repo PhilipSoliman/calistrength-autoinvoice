@@ -1,5 +1,7 @@
 from viktor.parametrization import (
+    ActionButton,
     DateField,
+    DownloadButton,
     FileField,
     HiddenField,
     LineBreak,
@@ -34,11 +36,17 @@ class Parametrization(ViktorParametrization):
 
     invoiceStep = Step("Invoice settings", views=["viewInvoice"])
     invoiceStep.intro = Text(
-        "Vul hieronder de gegevens in voor de factuur. De factuur wordt automatisch gegenereerd en kan vervolgens worden opgeslagen of bekeken."
+        "# Factuur gegevens\nVul hieronder de gegevens in voor de factuur. De factuur wordt automatisch gegenereerd en kan vervolgens worden opgeslagen of bekeken."
     )
     invoiceStep.clientName = OptionField("Klantnaam", options=getAvailableClients)
     invoiceStep.invoiceDate = DateField("Factuurdatum")
-    invoiceStep.expirationDate = DateField("Vervaldatum")
     invoiceStep.invoiceNumber = TextField("Factuurnummer")
+    invoiceStep.lb1 = LineBreak()
     invoiceStep.invoicePeriod = OptionField("Invoice period", INVOICE_PERIODS)
+    invoiceStep.expirationDate = DateField("Vervaldatum")
     invoiceStep.invoiceYear = OptionField("Invoice year", INVOICE_YEARS, default="2024")
+    invoiceStep.lb2 = LineBreak()
+    invoiceStep.saveInvoice = ActionButton("Factuur opslaan", method="saveInvoice")
+    invoiceStep.downloadInvoice = DownloadButton(
+        "Factuur downloaden", method="downloadInvoice"
+    )

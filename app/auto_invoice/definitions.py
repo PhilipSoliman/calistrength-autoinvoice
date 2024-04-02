@@ -1,5 +1,7 @@
 import datetime
 
+from viktor.errors import UserError
+
 INVOICE_PERIODS = [
     "1 januari - 31 januari",
     "1 februari - 28 februari",
@@ -22,7 +24,12 @@ def getAvailableClients(params, **kwargs):
     """
     Get list of available clients from finance data
     """
-    return params.uploadStep.financeData["availableClients"]
+    availableClients = ["None"]
+    if params.financeData is None:
+        raise UserError("Could not find finance data")
+    elif (availableClients := params.financeData.get("availableClients")) is None:
+        raise UserError("Could npt find available clients")
+    return availableClients
 
 
 def convertExcelDate(excelDateNumber: str) -> str:
