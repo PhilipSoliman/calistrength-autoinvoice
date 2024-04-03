@@ -1,5 +1,7 @@
-import datetime
 import json
+from calendar import Calendar
+from calendar import month_name as MONTH_NAMES
+from datetime import date
 
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
@@ -19,40 +21,65 @@ INVOICE_PERIODS = [
     "1 december - 31 december",
 ]
 
-INVOICE_YEARS = [str(year) for year in range(2024, 2030)]
+MONTH_NAMES = MONTH_NAMES[1:]  # month_names starts with empty string
+
+START_YEAR = 2024
+
+CURRENT_YEAR = date.today().year
+
+MAX_YEARS = 10
+
+INVOICE_YEARS = [str(year) for year in range(START_YEAR, START_YEAR + MAX_YEARS)]
+
+ORDINAL_BASE_EXCEL = date(1900, 1, 1).toordinal() - 2
 
 
 def getAvailableClients(params, **kwargs):
     """
     Get list of available clients from finance data
     """
-    financeData = getFinanceDataFromStorage()
-    if (availableClients := financeData.get("availableClients")) is None:
-        raise UserError("Could not find available clients in finance data")
-    return availableClients
+    return getFinanceDataAttributeFromStorage("availableClients")
+
 
 def getAvailableDates(params, **kwargs):
     """
     Get list of available dates from finance data and given client
     """
-    if (client := params.get("clientName")) is None:
+    if (client := params.invoiceStep.get("clientName")) is None:
         UserMessage.info("Please specify a client to get available dates")
         dates = []
     else:
-        financeData = getFinanceDataFromStorage()
-        if (clientData := financeData.get(client)) is None:
-            raise UserError(f"Could not find data for client {client} in finance data")
-        dates = list(clientData.keys())
+        clientData = getFinanceDataAttributeFromStorage(client)
+        dates = [convertOrdinalToDate(ordinal) for ordinal in clientData]
     return dates
 
-def convertExcelDate(excelDateNumber: str) -> str:
+
+def getAvailablePeriods(params, **kwargs):
+    """
+    Get list of available periods from finance data and given client
+    """
+    if (client := params.invoiceStep.get("clientName")) is None:
+        UserMessage.info("Please specify a client to get available periods")
+        periods = []
+    else:
+        ordinals = getFinanceDataAttributeFromStorage(client).keys()
+        list(map(int, ordinals))
+    return periods
+
+
+def convertExcelOrdinal(excelDateNumber: str) -> str:
     """
     Convert Excel date number to human readable date
     """
-    # TODO: implement
-    # baseDateExcel = datetime.datetime(1900, 1, 1)
-    # delta = datetime.timedelta(days=dateNumber - 2)
-    return
+    excelOrdinal = int(excelDateNumber)
+    return str(excelOrdinal + ORDINAL_BASE_EXCEL)
+
+
+def convertOrdinalToDate(ordinal: str) -> str:
+    """
+    Convert ordinal to date
+    """
+    return date.fromordinal(int(ordinal)).strftime(r"%d/%m/%y")
 
 
 def convertExcelFloat(excelFloat: str) -> float:
@@ -73,6 +100,16 @@ def getFinanceDataFromStorage() -> dict:
     return json.loads(financeDataFile.getvalue())
 
 
+def getFinanceDataAttributeFromStorage(key: str) -> dict:
+    """
+    Get finance data attributes from storage
+    """
+    financeData = getFinanceDataFromStorage()
+    if (data := financeData.get(key)) is None:
+        raise UserError(f"Could not find {key} in finance data")
+    return data
+
+
 def saveFinanceDataToStorage(financeData: dict) -> None:
     """
     Save finance data to storage
@@ -80,3 +117,43 @@ def saveFinanceDataToStorage(financeData: dict) -> None:
     storage = Storage()
     financeDataFile = File.from_data(json.dumps(financeData))
     storage.set("financeData", data=financeDataFile, scope="entity")
+
+
+def getInvoicePeriods(params, **kwargs) -> list[str]:
+    if (year := params.invoiceStep.get("invoiceYear")) is None:
+        UserMessage.info("Please specify a year to get available periods")
+    periods = generateInvoicePeriods(int(year))
+    return periods
+
+
+def generateInvoicePeriods(year: int) -> list[str]:
+    periods = []
+    cal = Calendar()
+    for monthNr, monthName in enumerate(MONTH_NAMES, start=1):
+        monthDays = list(cal.itermonthdays(year, monthNr))
+        periods.append(f"1 {monthName.lower()} - {max(monthDays)} {monthName.lower()}")
+    return periods
+
+
+def checkInvoiceSetup(params, **kwargs) -> bool:
+    """
+    Check if invoice already exists
+    """
+    invoiceSetup = [
+        params.invoiceStep.get("clientName"),
+        params.invoiceStep.get("invoiceDate"),
+        params.invoiceStep.get("invoicePeriod"),
+        params.invoiceStep.get("expirationDate"),
+    ]
+    print(invoiceSetup)
+    if None in invoiceSetup:
+        return False
+    return True
+
+
+def getInvoiceNumber(client: str, invoiceDate: str) -> str:
+    """
+    Get invoice number
+    """
+    # TODO: implement
+    return "some invoice number"

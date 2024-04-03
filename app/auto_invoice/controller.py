@@ -1,6 +1,7 @@
 from pprint import pprint
 
-from viktor import ViktorController
+from munch import unmunchify
+from viktor import ViktorController, progress_message
 from viktor.api_v1 import FileResource
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
@@ -15,9 +16,11 @@ from viktor.utils import convert_word_to_pdf
 from viktor.views import PDFResult, PDFView
 
 from app.auto_invoice.definitions import (
-    convertExcelDate,
+    checkInvoiceSetup,
     convertExcelFloat,
+    convertExcelOrdinal,
     getFinanceDataFromStorage,
+    getInvoiceNumber,
     saveFinanceDataToStorage,
 )
 from app.auto_invoice.parametrization import Parametrization
@@ -27,37 +30,6 @@ from app.helper import pyutils
 class Controller(ViktorController):
     label = "autoInvoice"
     parametrization = Parametrization
-
-    @PDFView("PDF viewer", duration_guess=5)
-    def viewInvoice(self, params, **kwargs):
-        wordFile = self.renderInvoice(params)
-        with wordFile.open_binary() as f1:
-            pdf_file = convert_word_to_pdf(f1)
-        return PDFResult(file=pdf_file)
-
-    def loadInvoice(self, params) -> File:
-        """
-        Load invoice from storage
-        """
-        storageKey = self.getStorageKey(params)
-        if storageKey not in Storage().list(scope="entity"):
-            raise UserError(f"No invoice {storageKey} found in storage")
-        return Storage().get(storageKey, scope="entity")
-
-    def saveInvoice(self, params, **kwargs) -> None:
-        """
-        Save rendered invoice to storage
-        """
-        storageKey = self.getStorageKey(params)
-        wordFile = self.renderInvoice(params)
-        Storage().set(storageKey, data=wordFile, scope="entity")
-
-    def downloadInvoice(self, params, **kwargs):
-        word_file = self.renderInvoice(params)
-        fn = f"invoice-{self.getStorageKey(params)}.pdf"
-        with word_file.open_binary() as f1:
-            pdf_file = convert_word_to_pdf(f1)
-        return DownloadResult(pdf_file, fn)
 
     def updateFinanceData(self, params, **kwargs) -> None:
         """
@@ -84,21 +56,88 @@ class Controller(ViktorController):
         newFinanceData["availableClients"] = financeData["availableClients"]
 
         # save new finance data
+        pprint(newFinanceData)
         saveFinanceDataToStorage(newFinanceData)
 
-    ####################################################
-    ################# Helper functions #################
-    ####################################################
+    def setupInvoice(self, params, **kwargs) -> SetParamsResult:
+        """
+        Search for invoice in finance data
+        """
+        params.invoiceStep.foundInvoice = False
+        client = params.invoiceStep.clientName
+        invoiceParams = params.invoiceStep
+        if invoiceParams.searchMethod == "Factuurdatum":
+            invoiceParams.invoiceNumber = getInvoiceNumber(
+                client, invoiceParams.invoiceDate
+            )
+            invoiceParams.invoicePeriod = "period"
+            invoiceParams.expirationDate = "exprDate"
+        if invoiceParams.searchMethod == "Factuurperiode":
+            raise UserError(
+                "Deze functionaliteit is nog niet geïmplementeerd, gebruik Factuurdatum"
+            )
+            invoiceParams.invoiceDate = "date"
+            invoiceParams.invoiceNumber = getInvoiceNumber(
+                client, invoiceParams.invoiceDate
+            )
+            invoiceParams.expirationDate = "exprDate"
+        if invoiceParams.searchMethod == "Factuurnummer":
+            raise UserError(
+                "Deze functionaliteit is nog niet geïmplementeerd, gebruik Factuurdatum"
+            )
+            invoiceParams.invoiceDate = "date"
+            invoiceParams.invoicePeriod = "period"
+            invoiceParams.expirationDate = "exprDate"
 
-    def renderInvoice(self, params, **kwargs) -> File:
+        UserMessage.success("Factuur samengesteld!")
+        return SetParamsResult({"invoiceStep": unmunchify(invoiceParams)})
+
+    @PDFView("PDF viewer", duration_guess=5)
+    def viewInvoice(self, params, **kwargs):
+        if checkInvoiceSetup(params):
+            wordFile = self.renderInvoiceWordFile(params)
+            with wordFile.open_binary() as f1:
+                pdf_file = convert_word_to_pdf(f1)
+            return PDFResult(file=pdf_file)
+        else:
+            raise UserError("Stel eerst de factuur op voordat je deze kunt bekijken")
+
+    def loadInvoice(self, params) -> File:
+        """
+        Load invoice from storage
+        """
+        storageKey = self.getStorageKey(params)
+        if storageKey not in Storage().list(scope="entity"):
+            raise UserError(f"No invoice {storageKey} found in storage")
+        return Storage().get(storageKey, scope="entity")
+
+    def saveInvoice(self, params, **kwargs) -> None:
+        """
+        Save rendered invoice to storage
+        """
+        storageKey = self.getStorageKey(params)
+        wordFile = self.renderInvoice(params)
+        Storage().set(storageKey, data=wordFile, scope="entity")
+
+    def downloadInvoice(self, params, **kwargs):
+        word_file = self.renderInvoice(params)
+        fn = f"invoice-{self.getStorageKey(params)}.pdf"
+        with word_file.open_binary() as f1:
+            pdf_file = convert_word_to_pdf(f1)
+        return DownloadResult(pdf_file, fn)
+
+    def renderInvoiceWordFile(self, params, **kwargs) -> File:
         """
         Render invoice using template with most up to date input
         """
         template_dir = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
         with open(template_dir, "rb") as template:
             result = render_word_file(template, self.gatherInvoiceComponents(params))
-
         return result
+
+    ####################################################
+    ################# Helper functions #################
+    ####################################################
 
     def gatherInvoiceComponents(self, params, **kwargs) -> list[WordFileTag]:
         """
@@ -127,9 +166,7 @@ class Controller(ViktorController):
         Load finance data from uploaded excel file. Optionally pass any inputs from user
         (Not implemented yet)
         """
-        inputs = [
-            SpreadsheetCalculationInput("clientName", params.invoiceStep.clientName)
-        ]
+        inputs = [SpreadsheetCalculationInput("clientName", "")]
         financeFile = Controller.obtainFileFromResource(params.uploadStep.financeSheet)
         financeSheet = SpreadsheetCalculation(financeFile, inputs)
         financeData = financeSheet.evaluate(include_filled_file=False).values
@@ -146,7 +183,7 @@ class Controller(ViktorController):
                 ]
             elif itemKey == "invoiceDates":
                 financeData[itemKey] = [
-                    convertExcelDate(int(value)) for value in values[1:]
+                    convertExcelOrdinal(int(value)) for value in values[1:]
                 ]
             else:
                 raise UserError(f"Unknown key {itemKey} in finance data sheet")
