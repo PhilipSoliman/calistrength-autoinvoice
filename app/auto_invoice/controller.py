@@ -1,10 +1,8 @@
-import json
-from pathlib import Path
 from pprint import pprint
 
 from viktor import ViktorController
 from viktor.api_v1 import FileResource
-from viktor.core import File, Storage
+from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
 from viktor.external.spreadsheet import (
     SpreadsheetCalculation,
@@ -16,7 +14,12 @@ from viktor.result import DownloadResult, SetParamsResult
 from viktor.utils import convert_word_to_pdf
 from viktor.views import PDFResult, PDFView
 
-from app.auto_invoice.definitions import convertExcelDate, convertExcelFloat
+from app.auto_invoice.definitions import (
+    convertExcelDate,
+    convertExcelFloat,
+    getFinanceDataFromStorage,
+    saveFinanceDataToStorage,
+)
 from app.auto_invoice.parametrization import Parametrization
 from app.helper import pyutils
 
@@ -24,6 +27,78 @@ from app.helper import pyutils
 class Controller(ViktorController):
     label = "autoInvoice"
     parametrization = Parametrization
+
+    @PDFView("PDF viewer", duration_guess=5)
+    def viewInvoice(self, params, **kwargs):
+        wordFile = self.renderInvoice(params)
+        with wordFile.open_binary() as f1:
+            pdf_file = convert_word_to_pdf(f1)
+        return PDFResult(file=pdf_file)
+
+    def loadInvoice(self, params) -> File:
+        """
+        Load invoice from storage
+        """
+        storageKey = self.getStorageKey(params)
+        if storageKey not in Storage().list(scope="entity"):
+            raise UserError(f"No invoice {storageKey} found in storage")
+        return Storage().get(storageKey, scope="entity")
+
+    def saveInvoice(self, params, **kwargs) -> None:
+        """
+        Save rendered invoice to storage
+        """
+        storageKey = self.getStorageKey(params)
+        wordFile = self.renderInvoice(params)
+        Storage().set(storageKey, data=wordFile, scope="entity")
+
+    def downloadInvoice(self, params, **kwargs):
+        word_file = self.renderInvoice(params)
+        fn = f"invoice-{self.getStorageKey(params)}.pdf"
+        with word_file.open_binary() as f1:
+            pdf_file = convert_word_to_pdf(f1)
+        return DownloadResult(pdf_file, fn)
+
+    def updateFinanceData(self, params, **kwargs) -> None:
+        """
+        Update finance data in storage
+        """
+        oldFinanceData = {}
+        financeData = self.getFinanceDataExcel(params)
+        storage = Storage()
+        if "financeData" in storage.list(scope="entity"):
+            oldFinanceData = getFinanceDataFromStorage()
+
+        # compare old and new data
+        if financeData == oldFinanceData:
+            UserMessage.info("No changes detected in finance data")
+            return
+
+        # update finance data (only for possibly novel clients in current finance data)
+        newFinanceData = dict(oldFinanceData)
+        for client in financeData["availableClients"]:
+            if client not in newFinanceData:
+                newFinanceData[client] = financeData[client]
+            else:
+                newFinanceData[client].update(financeData[client])
+        newFinanceData["availableClients"] = financeData["availableClients"]
+
+        # save new finance data
+        saveFinanceDataToStorage(newFinanceData)
+
+    ####################################################
+    ################# Helper functions #################
+    ####################################################
+
+    def renderInvoice(self, params, **kwargs) -> File:
+        """
+        Render invoice using template with most up to date input
+        """
+        template_dir = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
+        with open(template_dir, "rb") as template:
+            result = render_word_file(template, self.gatherInvoiceComponents(params))
+
+        return result
 
     def gatherInvoiceComponents(self, params, **kwargs) -> list[WordFileTag]:
         """
@@ -41,59 +116,17 @@ class Controller(ViktorController):
 
         return components
 
-    def renderInvoice(self, params, **kwargs) -> File:
-        """
-        Render invoice using template with most up to date input
-        """
-        template_dir = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
-        with open(template_dir, "rb") as template:
-            result = render_word_file(template, self.gatherInvoiceComponents(params))
-
-        return result
-
-    @PDFView("PDF viewer", duration_guess=5)
-    def viewInvoice(self, params, **kwargs):
-        word_file = self.renderInvoice(params)
-        with word_file.open_binary() as f1:
-            pdf_file = convert_word_to_pdf(f1)
-        return PDFResult(file=pdf_file)
-
-    def saveInvoice(self, params, **kwargs) -> None:
-        """
-        Save rendered invoice to storage
-        """
-        word_file = self.renderInvoice(params)
-        storage = Storage()
-        storage.set(self.getStorageKey(params), data=word_file, scope="workspace")
-
-    @staticmethod
-    def loadInvoice(invoiceNumber: str) -> File:
-        """
-        Load invoice from storage
-        """
-        storage = Storage()
-        word_file = storage.get(invoiceNumber, scope="workspace")
-        return word_file
-
-    def downloadInvoice(self, params, **kwargs):
-        word_file = self.renderInvoice(params)
-        fn = f"invoice-{self.getStorageKey(params)}.pdf"
-        with word_file.open_binary() as f1:
-            pdf_file = convert_word_to_pdf(f1)
-        return DownloadResult(pdf_file, fn)
-
     def getStorageKey(self, params) -> str:
         """
         Get storage key for invoice
         """
         return f"{params.invoiceStep.clientName}-{params.invoiceStep.invoiceNumber}"
 
-    def getFinanceData(self, params, **kwargs) -> SpreadsheetResult:
+    def getFinanceDataExcel(self, params, **kwargs) -> SpreadsheetResult:
         """
-        Load finance data from uploaded excel file, also pass any inputs from user
+        Load finance data from uploaded excel file. Optionally pass any inputs from user
+        (Not implemented yet)
         """
-        # TODO: move finance data from params to storage to prevent slow app in the future
-        # example of inputs
         inputs = [
             SpreadsheetCalculationInput("clientName", params.invoiceStep.clientName)
         ]
@@ -101,13 +134,10 @@ class Controller(ViktorController):
         financeSheet = SpreadsheetCalculation(financeFile, inputs)
         financeData = financeSheet.evaluate(include_filled_file=False).values
         for itemKey, dataString in financeData.items():
-            # get values from string
             if isinstance(dataString, str):
                 values = dataString.split(";")
             else:
                 raise UserError("Data values in finance sheet should be strings")
-
-            # assign values to financeData dict and do some type conversion
             if itemKey in ["clients", "availableClients"]:
                 financeData[itemKey] = values[1:]
             elif itemKey in ["pricesIncl", "pricesExcl"]:
@@ -120,8 +150,7 @@ class Controller(ViktorController):
                 ]
             else:
                 raise UserError(f"Unknown key {itemKey} in finance data sheet")
-
-        return SetParamsResult({"financeData": financeData})
+        return Controller.sortFinanceData(financeData)
 
     @staticmethod
     def obtainFileFromResource(fileResource: FileResource) -> File:
@@ -134,3 +163,23 @@ class Controller(ViktorController):
         except AttributeError:
             raise UserError(f"No finance (*.xlsx) file found.")
         return file
+
+    @staticmethod
+    def sortFinanceData(financeData: dict) -> dict:
+        """
+        sort by clients first then by date. This is also the structure of database
+        """
+        sortedFinanceData = {}
+        for client in financeData["availableClients"]:
+            sortedFinanceData[client] = {}
+
+        for i, client in enumerate(financeData["clients"]):
+            if client not in financeData["availableClients"]:
+                continue
+            date = financeData["invoiceDates"][i]
+            sortedFinanceData[client][date] = {
+                "priceIncl": financeData["pricesIncl"][i],
+                "priceExcl": financeData["pricesExcl"][i],
+            }
+        sortedFinanceData["availableClients"] = financeData["availableClients"]
+        return sortedFinanceData

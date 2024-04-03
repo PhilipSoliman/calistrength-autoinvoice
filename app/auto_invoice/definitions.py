@@ -1,5 +1,7 @@
 import datetime
+import json
 
+from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
 
 INVOICE_PERIODS = [
@@ -24,13 +26,24 @@ def getAvailableClients(params, **kwargs):
     """
     Get list of available clients from finance data
     """
-    availableClients = ["None"]
-    if params.financeData is None:
-        raise UserError("Could not find finance data")
-    elif (availableClients := params.financeData.get("availableClients")) is None:
-        raise UserError("Could npt find available clients")
+    financeData = getFinanceDataFromStorage()
+    if (availableClients := financeData.get("availableClients")) is None:
+        raise UserError("Could not find available clients in finance data")
     return availableClients
 
+def getAvailableDates(params, **kwargs):
+    """
+    Get list of available dates from finance data and given client
+    """
+    if (client := params.get("clientName")) is None:
+        UserMessage.info("Please specify a client to get available dates")
+        dates = []
+    else:
+        financeData = getFinanceDataFromStorage()
+        if (clientData := financeData.get(client)) is None:
+            raise UserError(f"Could not find data for client {client} in finance data")
+        dates = list(clientData.keys())
+    return dates
 
 def convertExcelDate(excelDateNumber: str) -> str:
     """
@@ -47,3 +60,23 @@ def convertExcelFloat(excelFloat: str) -> float:
     convert Excel-style float to regular float
     """
     return float(excelFloat.replace(",", "."))
+
+
+def getFinanceDataFromStorage() -> dict:
+    """
+    Get finance data from storage
+    """
+    storage = Storage()
+    if "financeData" not in storage.list(scope="entity"):
+        raise UserError("Could not find finance data in storage")
+    financeDataFile = storage.get("financeData", scope="entity")
+    return json.loads(financeDataFile.getvalue())
+
+
+def saveFinanceDataToStorage(financeData: dict) -> None:
+    """
+    Save finance data to storage
+    """
+    storage = Storage()
+    financeDataFile = File.from_data(json.dumps(financeData))
+    storage.set("financeData", data=financeDataFile, scope="entity")
