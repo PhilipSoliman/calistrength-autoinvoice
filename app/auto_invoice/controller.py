@@ -1,7 +1,7 @@
 from pprint import pprint
 
 from munch import unmunchify
-from viktor import ViktorController, progress_message
+from viktor import ViktorController
 from viktor.api_v1 import FileResource
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
@@ -13,12 +13,13 @@ from viktor.external.spreadsheet import (
 from viktor.external.word import WordFileTag, render_word_file
 from viktor.result import DownloadResult, SetParamsResult
 from viktor.utils import convert_word_to_pdf
-from viktor.views import PDFResult, PDFView
+from viktor.views import DataGroup, DataItem, DataResult, DataView, PDFResult, PDFView
 
 from app.auto_invoice.definitions import (
     checkInvoiceSetup,
     convertExcelFloat,
     convertExcelOrdinal,
+    convertOrdinalToDate,
     getFinanceDataFromStorage,
     getInvoiceNumber,
     saveFinanceDataToStorage,
@@ -56,8 +57,15 @@ class Controller(ViktorController):
         newFinanceData["availableClients"] = financeData["availableClients"]
 
         # save new finance data
-        pprint(newFinanceData)
         saveFinanceDataToStorage(newFinanceData)
+
+    @DataView("Finance data", duration_guess=1)
+    def viewFinanceData(self, params, **kwargs) -> SpreadsheetResult:
+        """
+        View finance data
+        """
+        financeData = getFinanceDataFromStorage()
+        return DataResult(Controller.unpackDataIntoDataItems(financeData))
 
     def setupInvoice(self, params, **kwargs) -> SetParamsResult:
         """
@@ -126,6 +134,51 @@ class Controller(ViktorController):
             pdf_file = convert_word_to_pdf(f1)
         return DownloadResult(pdf_file, fn)
 
+    ####################################################
+    ################# Helper functions #################
+    ####################################################
+
+    @staticmethod
+    def unpackDataIntoDataItems(data: dict, level=0) -> DataGroup:
+        """
+        Unpack data into DataItems
+        """
+        dataItems = []
+        if level == 0:
+            clientNr = 0
+            assignmentNr = 0
+        if level == 1:
+            assignmentNr = 0
+        for key, value in data.items():
+            if key == "availableClients":
+                continue
+            if isinstance(value, dict):
+                if level == 0:
+                    clientNr += 1
+                    dataItems.append(
+                        DataItem(
+                            f"Client {clientNr}",
+                            key,
+                            subgroup=Controller.unpackDataIntoDataItems(
+                                value, level=level + 1
+                            ),
+                        )
+                    )
+                elif level == 1:
+                    assignmentNr += 1
+                    dataItems.append(
+                        DataItem(
+                            f"Opdracht {assignmentNr}",
+                            key,
+                            subgroup=Controller.unpackDataIntoDataItems(
+                                value, level=level + 1
+                            ),
+                        )
+                    )
+            else:
+                dataItems.append(DataItem(key, value))
+        return DataGroup(*dataItems)
+
     def renderInvoiceWordFile(self, params, **kwargs) -> File:
         """
         Render invoice using template with most up to date input
@@ -134,10 +187,6 @@ class Controller(ViktorController):
         with open(template_dir, "rb") as template:
             result = render_word_file(template, self.gatherInvoiceComponents(params))
         return result
-
-    ####################################################
-    ################# Helper functions #################
-    ####################################################
 
     def gatherInvoiceComponents(self, params, **kwargs) -> list[WordFileTag]:
         """
@@ -183,7 +232,8 @@ class Controller(ViktorController):
                 ]
             elif itemKey == "invoiceDates":
                 financeData[itemKey] = [
-                    convertExcelOrdinal(int(value)) for value in values[1:]
+                    convertOrdinalToDate(convertExcelOrdinal(int(value)))
+                    for value in values[1:]
                 ]
             else:
                 raise UserError(f"Unknown key {itemKey} in finance data sheet")

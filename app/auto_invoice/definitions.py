@@ -1,7 +1,7 @@
 import json
 from calendar import Calendar
 from calendar import month_name as MONTH_NAMES
-from datetime import date
+from datetime import date as Date
 
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
@@ -25,13 +25,13 @@ MONTH_NAMES = MONTH_NAMES[1:]  # month_names starts with empty string
 
 START_YEAR = 2024
 
-CURRENT_YEAR = date.today().year
+CURRENT_YEAR = Date.today().year
 
 MAX_YEARS = 10
 
 INVOICE_YEARS = [str(year) for year in range(START_YEAR, START_YEAR + MAX_YEARS)]
 
-ORDINAL_BASE_EXCEL = date(1900, 1, 1).toordinal() - 2
+ORDINAL_BASE_EXCEL = Date(1900, 1, 1).toordinal() - 2
 
 
 def getAvailableClients(params, **kwargs):
@@ -50,7 +50,7 @@ def getAvailableDates(params, **kwargs):
         dates = []
     else:
         clientData = getFinanceDataAttributeFromStorage(client)
-        dates = [convertOrdinalToDate(ordinal) for ordinal in clientData]
+        dates = [date for date in clientData]
     return dates
 
 
@@ -79,7 +79,15 @@ def convertOrdinalToDate(ordinal: str) -> str:
     """
     Convert ordinal to date
     """
-    return date.fromordinal(int(ordinal)).strftime(r"%d/%m/%y")
+    return Date.fromordinal(int(ordinal)).strftime(r"%d/%m/%y")
+
+
+def convertDateToOrdinal(date: str) -> str:
+    """
+    Convert date to ordinal
+    """
+    d, m, y = [int(i) for i in date.split("/")]
+    return Date(d, m, y).toordinal()
 
 
 def convertExcelFloat(excelFloat: str) -> float:
@@ -137,7 +145,7 @@ def generateInvoicePeriods(year: int) -> list[str]:
 
 def checkInvoiceSetup(params, **kwargs) -> bool:
     """
-    Check if invoice already exists
+    Check existence of invoice in database
     """
     invoiceSetup = [
         params.invoiceStep.get("clientName"),
@@ -145,9 +153,22 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
         params.invoiceStep.get("invoicePeriod"),
         params.invoiceStep.get("expirationDate"),
     ]
-    print(invoiceSetup)
     if None in invoiceSetup:
+        UserMessage.warning("Missing invoice setup parameters")
         return False
+
+    # check if client exists in finance data
+    financeData = getFinanceDataFromStorage()
+    if (clientData := financeData.get(params.invoiceStep.clientName)) is None:
+        UserMessage.warning("Client not found in finance data")
+        return False
+
+    # check if invoice exists in finance data
+    if clientData.get(params.invoiceStep.invoiceDate) is None:
+        UserMessage.warning("Invoice not found in finance data")
+        return False
+
+    # if all of the above checks pass, return True
     return True
 
 

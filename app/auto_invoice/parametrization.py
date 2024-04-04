@@ -24,7 +24,7 @@ from app.auto_invoice.definitions import (
 
 
 class Parametrization(ViktorParametrization):
-    uploadStep = Step("Upload finance xlsx", views=[])
+    uploadStep = Step("Upload finance xlsx", views=["viewFinanceData"])
     uploadStep.intro = Text(
         "# CALISTRENGTH: auto invoice app 💰 \n Upload hieronder de meest recente versie van de finance excel"
     )
@@ -34,7 +34,6 @@ class Parametrization(ViktorParametrization):
     uploadStep.updateFinanceDataButton = ActionButton(
         "Update finance data", method="updateFinanceData"
     )
-    # TODO: add DataView for current finance data
 
     invoiceStep = Step("Genereer factuur", views=["viewInvoice"])
     invoiceStep.intro = Text(
@@ -77,14 +76,7 @@ class Parametrization(ViktorParametrization):
         "Factuur Opstellen", method="setupInvoice"
     )
     invoiceStep.expirationDate = OptionField("Vervaldatum", options=[], visible=False)
-    # invoiceStep.invoiceFound = HiddenField("invoice found", name="invoiceFound")
     invoiceStep.lb2 = LineBreak()
-    # invoiceStep.generateInvoiceButton = SetParamsButton(
-    #     "Genereer factuur",
-    #     method="generateInvoice",
-    #     visible=Lookup("invoiceStep.invoiceFound"),
-    # )
-    # invoiceStep.cachedInvoice = HiddenField("cached invoice", name="cachedInvoice")
     invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")
     invoiceStep.saveInvoice = ActionButton("Factuur opslaan", method="saveInvoice")
     invoiceStep.downloadInvoice = DownloadButton(
