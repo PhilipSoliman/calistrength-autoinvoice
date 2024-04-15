@@ -5,6 +5,7 @@ from viktor.parametrization import (
     FileField,
     HiddenField,
     IsEqual,
+    IsNotEqual,
     LineBreak,
     Lookup,
     OptionField,
@@ -18,7 +19,7 @@ from app.auto_invoice.definitions import (
     CURRENT_YEAR,
     INVOICE_YEARS,
     getAvailableClients,
-    getAvailableDates,
+    getavailableInvoiceNumbers,
     getInvoicePeriods,
 )
 
@@ -46,15 +47,21 @@ class Parametrization(ViktorParametrization):
     invoiceStep.clientName = OptionField("Klantnaam", options=getAvailableClients)
     invoiceStep.searchMethod = OptionField(
         "Hoe wilt u zoeken?",
-        ["Factuurdatum", "Factuurperiode", "Factuurnummer"],
-        default="Factuurdatum",
+        ["Factuurnummer", "Factuurperiode"],
+        default="Factuurnummer",
         variant="radio-inline",
+        visible=IsNotEqual(Lookup("invoiceStep.clientName"), None),
     )
     invoiceStep.lb1 = LineBreak()
-    invoiceStep.invoiceDate = OptionField(
-        "Factuurdatum",
-        options=getAvailableDates,
-        visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurdatum"),
+    # invoiceStep.invoiceDate = OptionField(
+    #     "Factuurdatum",
+    #     options=getAvailableDates,
+    #     visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurdatum"),
+    # )
+    invoiceStep.invoiceNumber = OptionField(
+        "Factuurnummer",
+        options=getavailableInvoiceNumbers,
+        visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurnummer"),
     )
     invoiceStep.invoiceYear = OptionField(
         "Invoice year",
@@ -67,14 +74,15 @@ class Parametrization(ViktorParametrization):
         options=getInvoicePeriods,
         visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
-    invoiceStep.invoiceNumber = OptionField(
-        "Factuurnummer",
-        options=[],  # getAvailableInvoiceNumbers
-        visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurnummer"),
+    invoiceStep.invoiceIndex = OptionField(
+        "Invoice index",
+        options=[],
+        visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.setupInvoiceButton = SetParamsButton(
         "Factuur Opstellen", method="setupInvoice"
     )
+    # TODO: add dynamic array field for invoice items
     invoiceStep.expirationDate = OptionField("Vervaldatum", options=[], visible=False)
     invoiceStep.lb2 = LineBreak()
     invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")

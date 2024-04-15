@@ -21,7 +21,8 @@ from app.auto_invoice.definitions import (
     convertExcelOrdinal,
     convertOrdinalToDate,
     getFinanceDataFromStorage,
-    getInvoiceNumber,
+    getInvoiceNumberFromPeriod,
+    getInvoicePeriodFromNumber,
     saveFinanceDataToStorage,
 )
 from app.auto_invoice.parametrization import Parametrization
@@ -46,18 +47,23 @@ class Controller(ViktorController):
         if financeData == oldFinanceData:
             UserMessage.info("No changes detected in finance data")
             return
+        else:
+            UserMessage.info("New clients data detected")
 
-        # update finance data (only for possibly novel clients in current finance data)
+        # update finance data
+        UserMessage.info("Updating finance data")
         newFinanceData = dict(oldFinanceData)
         for client in financeData["availableClients"]:
             if client not in newFinanceData:
                 newFinanceData[client] = financeData[client]
             else:
                 newFinanceData[client].update(financeData[client])
+
         newFinanceData["availableClients"] = financeData["availableClients"]
 
         # save new finance data
         saveFinanceDataToStorage(newFinanceData)
+        UserMessage.success("Finance data updated")
 
     @DataView("Finance data", duration_guess=1)
     def viewFinanceData(self, params, **kwargs) -> SpreadsheetResult:
@@ -74,28 +80,20 @@ class Controller(ViktorController):
         params.invoiceStep.foundInvoice = False
         client = params.invoiceStep.clientName
         invoiceParams = params.invoiceStep
-        if invoiceParams.searchMethod == "Factuurdatum":
-            invoiceParams.invoiceNumber = getInvoiceNumber(
-                client, invoiceParams.invoiceDate
-            )
-            invoiceParams.invoicePeriod = "period"
-            invoiceParams.expirationDate = "exprDate"
+        # if invoiceParams.searchMethod == "Factuurdatum":
+        #     invoiceParams.invoiceNumber = getInvoiceNumber(
+        #         client, invoiceParams.invoiceDate
+        #     )
+        #     invoiceParams.invoicePeriod = "period"
         if invoiceParams.searchMethod == "Factuurperiode":
-            raise UserError(
-                "Deze functionaliteit is nog niet geïmplementeerd, gebruik Factuurdatum"
-            )
             invoiceParams.invoiceDate = "date"
-            invoiceParams.invoiceNumber = getInvoiceNumber(
-                client, invoiceParams.invoiceDate
+            invoiceParams.invoiceNumber = getInvoiceNumberFromPeriod(
+                params.client, invoiceParams.invoiceDate
             )
-            invoiceParams.expirationDate = "exprDate"
         if invoiceParams.searchMethod == "Factuurnummer":
-            raise UserError(
-                "Deze functionaliteit is nog niet geïmplementeerd, gebruik Factuurdatum"
-            )
-            invoiceParams.invoiceDate = "date"
-            invoiceParams.invoicePeriod = "period"
-            invoiceParams.expirationDate = "exprDate"
+            period, year = getInvoicePeriodFromNumber(params.inoiceStep.invoiceNumber)
+            invoiceParams.invoiceYear = year
+            invoiceParams.invoicePeriod = period
 
         UserMessage.success("Factuur samengesteld!")
         return SetParamsResult({"invoiceStep": unmunchify(invoiceParams)})
@@ -224,18 +222,23 @@ class Controller(ViktorController):
                 values = dataString.split(";")
             else:
                 raise UserError("Data values in finance sheet should be strings")
-            if itemKey in ["clients", "availableClients"]:
+            if itemKey in [
+                "clients",
+                "availableClients",
+                "clientNumbers",
+                "invoiceNumbers",
+            ]:  # data is a list of strings
                 financeData[itemKey] = values[1:]
-            elif itemKey in ["pricesIncl", "pricesExcl"]:
+            elif itemKey in ["pricesIncl", "pricesExcl"]:  # data is a list of floats
                 financeData[itemKey] = [
                     convertExcelFloat(value) for value in values[1:]
                 ]
-            elif itemKey == "invoiceDates":
+            elif itemKey == "invoiceDates":  # data is a list of dates
                 financeData[itemKey] = [
                     convertOrdinalToDate(convertExcelOrdinal(int(value)))
                     for value in values[1:]
                 ]
-            else:
+            else:  # unknown key
                 raise UserError(f"Unknown key {itemKey} in finance data sheet")
         return Controller.sortFinanceData(financeData)
 
@@ -258,15 +261,32 @@ class Controller(ViktorController):
         """
         sortedFinanceData = {}
         for client in financeData["availableClients"]:
-            sortedFinanceData[client] = {}
+            sortedFinanceData[client] = {"availableInvoiceNumbers": []}
 
         for i, client in enumerate(financeData["clients"]):
             if client not in financeData["availableClients"]:
                 continue
             date = financeData["invoiceDates"][i]
+            invoiceNumber = financeData["invoiceNumbers"][i]
             sortedFinanceData[client][date] = {
                 "priceIncl": financeData["pricesIncl"][i],
                 "priceExcl": financeData["pricesExcl"][i],
+                "invoiceNumber": invoiceNumber,
             }
+            if (
+                invoiceNumber
+                not in sortedFinanceData[client]["availableInvoiceNumbers"]
+            ):
+                sortedFinanceData[client]["availableInvoiceNumbers"].append(
+                    financeData["invoiceNumbers"][i]
+                )
         sortedFinanceData["availableClients"] = financeData["availableClients"]
+        sortedFinanceData["clientNumbers"] = financeData["clientNumbers"]
+
+        # for client, key in sortedFinanceData.items():
+        #     if key == "availableInvoiceNumbers":
+        #         sortedFinanceData[client]["availableInvoiceNumbers"] = list(
+        #             dict.fromkeys(client[key])  # remove duplicates
+        #         )
+
         return sortedFinanceData

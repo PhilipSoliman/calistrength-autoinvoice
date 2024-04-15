@@ -6,20 +6,20 @@ from datetime import date as Date
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import UserError
 
-INVOICE_PERIODS = [
-    "1 januari - 31 januari",
-    "1 februari - 28 februari",
-    "1 maart - 31 maart",
-    "1 april - 30 april",
-    "1 mei - 31 mei",
-    "1 juni - 30 juni",
-    "1 juli - 31 juli",
-    "1 augustus - 31 augustus",
-    "1 september - 30 september",
-    "1 oktober - 31 oktober",
-    "1 november - 30 november",
-    "1 december - 31 december",
-]
+# INVOICE_PERIODS = [
+#     "1 januari - 31 januari",
+#     "1 februari - 28 februari",
+#     "1 maart - 31 maart",
+#     "1 april - 30 april",
+#     "1 mei - 31 mei",
+#     "1 juni - 30 juni",
+#     "1 juli - 31 juli",
+#     "1 augustus - 31 augustus",
+#     "1 september - 30 september",
+#     "1 oktober - 31 oktober",
+#     "1 november - 30 november",
+#     "1 december - 31 december",
+# ]
 
 MONTH_NAMES = MONTH_NAMES[1:]  # month_names starts with empty string
 
@@ -103,7 +103,7 @@ def getFinanceDataFromStorage() -> dict:
     """
     storage = Storage()
     if "financeData" not in storage.list(scope="entity"):
-        raise UserError("Could not find finance data in storage")
+        UserMessage.warning("Could not find finance data in storage")
     financeDataFile = storage.get("financeData", scope="entity")
     return json.loads(financeDataFile.getvalue())
 
@@ -114,7 +114,7 @@ def getFinanceDataAttributeFromStorage(key: str) -> dict:
     """
     financeData = getFinanceDataFromStorage()
     if (data := financeData.get(key)) is None:
-        raise UserError(f"Could not find {key} in finance data")
+        UserMessage.warning(f"Could not find {key} in finance data")
     return data
 
 
@@ -172,9 +172,35 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
     return True
 
 
-def getInvoiceNumber(client: str, invoiceDate: str) -> str:
+def getInvoicePeriodFromNumber(invoiceNumber: int) -> tuple[str, int]:
     """
-    Get invoice number
+    Get invoice period from invoice number
     """
-    # TODO: implement
-    return "some invoice number"
+    period, year = invoiceNumber.split(".")[2:]
+    year = int("20" + year)
+    periods = generateInvoicePeriods(int(year))
+    return periods[int(period) - 1], year
+
+
+def getInvoiceNumberFromPeriod(client: str, period: str, year: int) -> int:
+    """
+    Get invoice number from period and year
+    """
+    periods = generateInvoicePeriods(year)
+    periodNr = periods.index(period) + 1
+    clients = getFinanceDataAttributeFromStorage("availableClients")
+    clientIndex = clients.index(client)
+    numbers = getFinanceDataAttributeFromStorage("clientNumbers")
+    clientNumber = numbers[clientIndex]
+    return int(f"{clientNumber}.XXX.{periodNr}.{str(year)[2:]}")
+
+
+def getavailableInvoiceNumbers(params, **kwargs) -> list[str]:
+    """
+    Get list of available invoice numbers from finance data and given client
+    """
+    if clientData := getFinanceDataAttributeFromStorage(
+        params.invoiceStep.get("clientName")
+    ):
+        return clientData["availableInvoiceNumbers"]
+    return []
