@@ -2,6 +2,7 @@ import json
 from calendar import Calendar
 from calendar import month_name as MONTH_NAMES
 from datetime import date as Date
+from pprint import pprint
 
 from deep_translator import GoogleTranslator
 from viktor.core import File, Storage, UserMessage
@@ -183,8 +184,8 @@ def getInvoiceIndices(params, **kwargs) -> list[str]:
     indices = []
     for invoiceNumber in clientData["availableInvoiceNumbers"]:
         _, index, _periodNr, _yearNr = invoiceNumber.split(".")
-        print("requested: ", periodNr, yearNr)
-        print("available: ", invoiceNumber, index, _periodNr, _yearNr)
+        # print("requested: ", periodNr, yearNr)
+        # print("available: ", invoiceNumber, index, _periodNr, _yearNr)
         if (_periodNr == periodNr) and (_yearNr == yearNr) and index not in indices:
             indices.append(index)
     if indices == []:
@@ -206,9 +207,10 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
     """
     invoiceSetup = [
         params.invoiceStep.get("clientName"),
-        params.invoiceStep.get("invoiceDate"),
+        params.invoiceStep.get("invoiceNumber"),
+        params.invoiceStep.get("invoiceYear"),
         params.invoiceStep.get("invoicePeriod"),
-        params.invoiceStep.get("expirationDate"),
+        params.invoiceStep.get("invoiceIndex"),
     ]
     if None in invoiceSetup:
         UserMessage.warning("Missing invoice setup parameters")
@@ -220,10 +222,12 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
         UserMessage.warning("Client not found in finance data")
         return False
 
-    # check if invoice exists in finance data
-    if clientData.get(params.invoiceStep.invoiceDate) is None:
-        UserMessage.warning("Invoice not found in finance data")
-        return False
+    # # check if invoice exists in finance data
+    # if clientData.get(params.invoiceStep.invoiceDate) is None:
+    #     UserMessage.warning("Invoice not found in finance data")
+    #     return False
+
+    # for invoi
 
     # if all of the above checks pass, return True
     return True
@@ -248,7 +252,7 @@ def getInvoiceNumberFromPeriodAndIndex(
     clientNumber = getClientNr(client)
     periodNr = getPeriodNr(year, period)
     yearNr = getYearNr(year)
-    return int(f"{clientNumber}.{index}.{periodNr}.{yearNr}")
+    return f"{clientNumber}.{index}.{periodNr}.{yearNr}"
 
 
 def getavailableInvoiceNumbers(params, **kwargs) -> list[str]:
@@ -267,7 +271,9 @@ def getClientNr(clientName: str) -> str:
     Get client number
     """
     clients = getFinanceDataAttributeFromStorage("availableClients")
+    pprint(getFinanceDataFromStorage())
     numbers = getFinanceDataAttributeFromStorage("clientNumbers")
+    print(numbers)
     return numbers[clients.index(clientName)]
 
 

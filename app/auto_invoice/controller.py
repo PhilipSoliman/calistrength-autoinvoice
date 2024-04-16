@@ -60,6 +60,7 @@ class Controller(ViktorController):
                 newFinanceData[client].update(financeData[client])
 
         newFinanceData["availableClients"] = financeData["availableClients"]
+        newFinanceData["clientNumbers"] = financeData["clientNumbers"]
 
         # save new finance data
         saveFinanceDataToStorage(newFinanceData)
@@ -81,13 +82,8 @@ class Controller(ViktorController):
         and payment data.
         """
         params.invoiceStep.foundInvoice = False
-        client = params.invoiceStep.clientName
+        # client = params.invoiceStep.clientName
         invoiceParams = params.invoiceStep
-        # if invoiceParams.searchMethod == "Factuurdatum":
-        #     invoiceParams.invoiceNumber = getInvoiceNumber(
-        #         client, invoiceParams.invoiceDate
-        #     )
-        #     invoiceParams.invoicePeriod = "period"
         if invoiceParams.searchMethod == "Factuurperiode":
             clientName = params.invoiceStep.clientName
             period = params.invoiceStep.invoicePeriod
@@ -98,7 +94,7 @@ class Controller(ViktorController):
             )
         if invoiceParams.searchMethod == "Factuurnummer":
             index, period, year = getInvoicePeriodFromNumber(
-                params.inoiceStep.invoiceNumber
+                params.invoiceStep.invoiceNumber
             )
             invoiceParams.invoiceIndex = index
             invoiceParams.invoicePeriod = period
@@ -297,5 +293,5 @@ class Controller(ViktorController):
         #         sortedFinanceData[client]["availableInvoiceNumbers"] = list(
         #             dict.fromkeys(client[key])  # remove duplicates
         #         )
-
+        pprint(sortedFinanceData)
         return sortedFinanceData
