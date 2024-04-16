@@ -97,9 +97,12 @@ class Controller(ViktorController):
                 clientName, index, period, year
             )
         if invoiceParams.searchMethod == "Factuurnummer":
-            period, year = getInvoicePeriodFromNumber(params.inoiceStep.invoiceNumber)
-            invoiceParams.invoiceYear = year
+            index, period, year = getInvoicePeriodFromNumber(
+                params.inoiceStep.invoiceNumber
+            )
+            invoiceParams.invoiceIndex = index
             invoiceParams.invoicePeriod = period
+            invoiceParams.invoiceYear = year
 
         UserMessage.success("Factuur samengesteld!")
         return SetParamsResult({"invoiceStep": unmunchify(invoiceParams)})

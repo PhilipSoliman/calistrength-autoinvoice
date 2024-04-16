@@ -233,10 +233,10 @@ def getInvoicePeriodFromNumber(invoiceNumber: int) -> tuple[str, int]:
     """
     Get invoice period from invoice number
     """
-    periodNr, yearNr = invoiceNumber.split(".")[2:]
+    indexNr, periodNr, yearNr = invoiceNumber.split(".")[1:]
     year = getYearFromYearNr(yearNr)
     periods = generateInvoicePeriods(year)
-    return periods[int(periodNr) - 1], year
+    return indexNr, periods[int(periodNr) - 1], year
 
 
 def getInvoiceNumberFromPeriodAndIndex(
