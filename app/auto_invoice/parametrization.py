@@ -20,7 +20,9 @@ from app.auto_invoice.definitions import (
     INVOICE_YEARS,
     getAvailableClients,
     getavailableInvoiceNumbers,
+    getInvoiceIndices,
     getInvoicePeriods,
+    getInvoiceYears,
 )
 
 
@@ -53,11 +55,6 @@ class Parametrization(ViktorParametrization):
         visible=IsNotEqual(Lookup("invoiceStep.clientName"), None),
     )
     invoiceStep.lb1 = LineBreak()
-    # invoiceStep.invoiceDate = OptionField(
-    #     "Factuurdatum",
-    #     options=getAvailableDates,
-    #     visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurdatum"),
-    # )
     invoiceStep.invoiceNumber = OptionField(
         "Factuurnummer",
         options=getavailableInvoiceNumbers,
@@ -65,26 +62,29 @@ class Parametrization(ViktorParametrization):
     )
     invoiceStep.invoiceYear = OptionField(
         "Invoice year",
-        INVOICE_YEARS,
-        default=CURRENT_YEAR,
+        options=getInvoiceYears,
         visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.invoicePeriod = OptionField(
         "Invoice period",
         options=getInvoicePeriods,
-        visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
+        visible=
+            IsNotEqual(Lookup("invoiceStep.invoiceYear"), None) 
+            and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.invoiceIndex = OptionField(
         "Invoice index",
-        options=[],
-        visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
+        options=getInvoiceIndices,
+        visible=IsNotEqual(Lookup("invoiceStep.invoicePeriod"), None)
+        and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
+    invoiceStep.lb2 = LineBreak()
     invoiceStep.setupInvoiceButton = SetParamsButton(
         "Factuur Opstellen", method="setupInvoice"
     )
     # TODO: add dynamic array field for invoice items
     invoiceStep.expirationDate = OptionField("Vervaldatum", options=[], visible=False)
-    invoiceStep.lb2 = LineBreak()
+    invoiceStep.lb3 = LineBreak()
     invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")
     invoiceStep.saveInvoice = ActionButton("Factuur opslaan", method="saveInvoice")
     invoiceStep.downloadInvoice = DownloadButton(

@@ -21,7 +21,7 @@ from app.auto_invoice.definitions import (
     convertExcelOrdinal,
     convertOrdinalToDate,
     getFinanceDataFromStorage,
-    getInvoiceNumberFromPeriod,
+    getInvoiceNumberFromPeriodAndIndex,
     getInvoicePeriodFromNumber,
     saveFinanceDataToStorage,
 )
@@ -75,7 +75,10 @@ class Controller(ViktorController):
 
     def setupInvoice(self, params, **kwargs) -> SetParamsResult:
         """
-        Search for invoice in finance data
+        Search for invoice in finance data. The goal of this function
+        is to make sure that invoice number, date & period (+year) are set.
+        such that downstream functions can find all the relevant assignments
+        and payment data.
         """
         params.invoiceStep.foundInvoice = False
         client = params.invoiceStep.clientName
@@ -86,9 +89,12 @@ class Controller(ViktorController):
         #     )
         #     invoiceParams.invoicePeriod = "period"
         if invoiceParams.searchMethod == "Factuurperiode":
-            invoiceParams.invoiceDate = "date"
-            invoiceParams.invoiceNumber = getInvoiceNumberFromPeriod(
-                params.client, invoiceParams.invoiceDate
+            clientName = params.invoiceStep.clientName
+            period = params.invoiceStep.invoicePeriod
+            year = params.invoiceStep.invoiceYear
+            index = params.invoiceStep.invoiceIndex
+            invoiceParams.invoiceNumber = getInvoiceNumberFromPeriodAndIndex(
+                clientName, index, period, year
             )
         if invoiceParams.searchMethod == "Factuurnummer":
             period, year = getInvoicePeriodFromNumber(params.inoiceStep.invoiceNumber)

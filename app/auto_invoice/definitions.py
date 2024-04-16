@@ -3,8 +3,9 @@ from calendar import Calendar
 from calendar import month_name as MONTH_NAMES
 from datetime import date as Date
 
+from deep_translator import GoogleTranslator
 from viktor.core import File, Storage, UserMessage
-from viktor.errors import UserError
+from viktor.errors import InputViolation, UserError
 
 # INVOICE_PERIODS = [
 #     "1 januari - 31 januari",
@@ -127,9 +128,25 @@ def saveFinanceDataToStorage(financeData: dict) -> None:
     storage.set("financeData", data=financeDataFile, scope="entity")
 
 
+def getInvoiceYears(params, **kwargs) -> list[str]:
+    """
+    Get list of available invoice years
+    """
+    clientName = params.invoiceStep.get("clientName")
+    clientData = getFinanceDataAttributeFromStorage(clientName)
+    years = []
+    for invoiceNumber in clientData["availableInvoiceNumbers"]:
+        yearNr = invoiceNumber.split(".")[3]
+        year = getYearFromYearNr(yearNr)
+        if year not in years:
+            years.append(getYearFromYearNr(yearNr))
+    return years
+
+
 def getInvoicePeriods(params, **kwargs) -> list[str]:
     if (year := params.invoiceStep.get("invoiceYear")) is None:
         UserMessage.info("Please specify a year to get available periods")
+        return []
     periods = generateInvoicePeriods(int(year))
     return periods
 
@@ -139,8 +156,48 @@ def generateInvoicePeriods(year: int) -> list[str]:
     cal = Calendar()
     for monthNr, monthName in enumerate(MONTH_NAMES, start=1):
         monthDays = list(cal.itermonthdays(year, monthNr))
-        periods.append(f"1 {monthName.lower()} - {max(monthDays)} {monthName.lower()}")
+        period_eng = f"1 {monthName.lower()} - {max(monthDays)} {monthName.lower()}"
+        period_nl = GoogleTranslator(source="en", target="nl").translate(period_eng)
+        periods.append(period_nl)
     return periods
+
+
+def getInvoiceIndices(params, **kwargs) -> list[str]:
+    """
+    Get list of available invoice indices for a given client, year and period
+    """
+    # clientNumber = getClientNr(params.invoiceStep.get("clientName"))
+    year = params.invoiceStep.get("invoiceYear")
+    if year is None:
+        # fields = ["invoiceStep.invoiceYear", "invoiceStep.invoicePeriod"]
+        # violation = InputViolation("Year or period not specified", fields=fields)
+        # raise UserError(generalErroMsg, violation=violation)
+        return []
+
+    yearNr = getYearNr(year)
+    periodNr = getPeriodNr(year, params.invoiceStep.get("invoicePeriod"))
+    generalErroMsg = "Cannot find invoices"
+    clientData = getFinanceDataAttributeFromStorage(
+        params.invoiceStep.get("clientName")
+    )
+    indices = []
+    for invoiceNumber in clientData["availableInvoiceNumbers"]:
+        _, index, _periodNr, _yearNr = invoiceNumber.split(".")
+        print("requested: ", periodNr, yearNr)
+        print("available: ", invoiceNumber, index, _periodNr, _yearNr)
+        if (_periodNr == periodNr) and (_yearNr == yearNr) and index not in indices:
+            indices.append(index)
+    if indices == []:
+        fields = [
+            "clientName",
+            "invoiceStep.invoiceYear",
+            "invoiceStep.invoicePeriod",
+        ]
+        violation = InputViolation(
+            "No indices found for given client, year and period", fields=fields
+        )
+        raise UserError(generalErroMsg, input_violations=violation)
+    return indices
 
 
 def checkInvoiceSetup(params, **kwargs) -> bool:
@@ -176,23 +233,22 @@ def getInvoicePeriodFromNumber(invoiceNumber: int) -> tuple[str, int]:
     """
     Get invoice period from invoice number
     """
-    period, year = invoiceNumber.split(".")[2:]
-    year = int("20" + year)
-    periods = generateInvoicePeriods(int(year))
-    return periods[int(period) - 1], year
+    periodNr, yearNr = invoiceNumber.split(".")[2:]
+    year = getYearFromYearNr(yearNr)
+    periods = generateInvoicePeriods(year)
+    return periods[int(periodNr) - 1], year
 
 
-def getInvoiceNumberFromPeriod(client: str, period: str, year: int) -> int:
+def getInvoiceNumberFromPeriodAndIndex(
+    client: str, index: str, period: str, year: int
+) -> int:
     """
     Get invoice number from period and year
     """
-    periods = generateInvoicePeriods(year)
-    periodNr = periods.index(period) + 1
-    clients = getFinanceDataAttributeFromStorage("availableClients")
-    clientIndex = clients.index(client)
-    numbers = getFinanceDataAttributeFromStorage("clientNumbers")
-    clientNumber = numbers[clientIndex]
-    return int(f"{clientNumber}.XXX.{periodNr}.{str(year)[2:]}")
+    clientNumber = getClientNr(client)
+    periodNr = getPeriodNr(year, period)
+    yearNr = getYearNr(year)
+    return int(f"{clientNumber}.{index}.{periodNr}.{yearNr}")
 
 
 def getavailableInvoiceNumbers(params, **kwargs) -> list[str]:
@@ -204,3 +260,30 @@ def getavailableInvoiceNumbers(params, **kwargs) -> list[str]:
     ):
         return clientData["availableInvoiceNumbers"]
     return []
+
+
+def getClientNr(clientName: str) -> str:
+    """
+    Get client number
+    """
+    clients = getFinanceDataAttributeFromStorage("availableClients")
+    numbers = getFinanceDataAttributeFromStorage("clientNumbers")
+    return numbers[clients.index(clientName)]
+
+
+def getPeriodNr(year: int, period: str) -> str:
+    periods = generateInvoicePeriods(year)
+    periodNr = periods.index(period) + 1
+    if periodNr < 10:
+        periodNr = f"0{periodNr}"
+    else:
+        periodNr = str(periodNr)
+    return periodNr
+
+
+def getYearNr(year: int) -> str:
+    return str(year - 2000)
+
+
+def getYearFromYearNr(yearNr: int | str) -> int:
+    return int(yearNr) + 2000
