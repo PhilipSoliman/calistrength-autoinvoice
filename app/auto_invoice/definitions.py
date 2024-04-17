@@ -133,14 +133,16 @@ def getInvoiceYears(params, **kwargs) -> list[str]:
     """
     Get list of available invoice years
     """
-    clientName = params.invoiceStep.get("clientName")
+    if (clientName := params.invoiceStep.get("clientName")) is None:
+        return []
     clientData = getFinanceDataAttributeFromStorage(clientName)
     years = []
-    for invoiceNumber in clientData["availableInvoiceNumbers"]:
-        yearNr = invoiceNumber.split(".")[3]
-        year = getYearFromYearNr(yearNr)
-        if year not in years:
-            years.append(getYearFromYearNr(yearNr))
+    if availableInvoiceNumbers := clientData.get("availableInvoiceNumbers"):
+        for invoiceNumber in availableInvoiceNumbers:
+            yearNr = invoiceNumber.split(".")[3]
+            year = getYearFromYearNr(yearNr)
+            if year not in years:
+                years.append(getYearFromYearNr(yearNr))
     return years
 
 
@@ -168,14 +170,15 @@ def getInvoiceIndices(params, **kwargs) -> list[str]:
     Get list of available invoice indices for a given client, year and period
     """
     # clientNumber = getClientNr(params.invoiceStep.get("clientName"))
-    year = params.invoiceStep.get("invoiceYear")
-    if year is None:
+
+    if (year := params.invoiceStep.get("invoiceYear")) is None:
         # fields = ["invoiceStep.invoiceYear", "invoiceStep.invoicePeriod"]
         # violation = InputViolation("Year or period not specified", fields=fields)
         # raise UserError(generalErroMsg, violation=violation)
         return []
-
     yearNr = getYearNr(year)
+    if (period := params.invoiceStep.get("invoicePeriod")) is None:
+        return []
     periodNr = getPeriodNr(year, params.invoiceStep.get("invoicePeriod"))
     generalErroMsg = "Cannot find invoices"
     clientData = getFinanceDataAttributeFromStorage(
