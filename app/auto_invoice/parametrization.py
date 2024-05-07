@@ -1,9 +1,7 @@
 from viktor.parametrization import (
     ActionButton,
-    DateField,
     DownloadButton,
     FileField,
-    HiddenField,
     IsEqual,
     IsNotEqual,
     LineBreak,
@@ -16,8 +14,6 @@ from viktor.parametrization import (
 )
 
 from app.auto_invoice.definitions import (
-    CURRENT_YEAR,
-    INVOICE_YEARS,
     getAvailableClients,
     getavailableInvoiceNumbers,
     getInvoiceIndices,

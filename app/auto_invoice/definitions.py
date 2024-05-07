@@ -8,20 +8,6 @@ from deep_translator import GoogleTranslator
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import InputViolation, UserError
 
-# INVOICE_PERIODS = [
-#     "1 januari - 31 januari",
-#     "1 februari - 28 februari",
-#     "1 maart - 31 maart",
-#     "1 april - 30 april",
-#     "1 mei - 31 mei",
-#     "1 juni - 30 juni",
-#     "1 juli - 31 juli",
-#     "1 augustus - 31 augustus",
-#     "1 september - 30 september",
-#     "1 oktober - 31 oktober",
-#     "1 november - 30 november",
-#     "1 december - 31 december",
-# ]
 
 MONTH_NAMES = MONTH_NAMES[1:]  # month_names starts with empty string
 
@@ -169,12 +155,7 @@ def getInvoiceIndices(params, **kwargs) -> list[str]:
     """
     Get list of available invoice indices for a given client, year and period
     """
-    # clientNumber = getClientNr(params.invoiceStep.get("clientName"))
-
     if (year := params.invoiceStep.get("invoiceYear")) is None:
-        # fields = ["invoiceStep.invoiceYear", "invoiceStep.invoicePeriod"]
-        # violation = InputViolation("Year or period not specified", fields=fields)
-        # raise UserError(generalErroMsg, violation=violation)
         return []
     yearNr = getYearNr(year)
     if (period := params.invoiceStep.get("invoicePeriod")) is None:
@@ -187,8 +168,6 @@ def getInvoiceIndices(params, **kwargs) -> list[str]:
     indices = []
     for invoiceNumber in clientData["availableInvoiceNumbers"]:
         _, index, _periodNr, _yearNr = invoiceNumber.split(".")
-        # print("requested: ", periodNr, yearNr)
-        # print("available: ", invoiceNumber, index, _periodNr, _yearNr)
         if (_periodNr == periodNr) and (_yearNr == yearNr) and index not in indices:
             indices.append(index)
     if indices == []:
@@ -224,15 +203,7 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
     if (clientData := financeData.get(params.invoiceStep.clientName)) is None:
         UserMessage.warning("Client not found in finance data")
         return False
-
-    # # check if invoice exists in finance data
-    # if clientData.get(params.invoiceStep.invoiceDate) is None:
-    #     UserMessage.warning("Invoice not found in finance data")
-    #     return False
-
-    # for invoi
-
-    # if all of the above checks pass, return True
+    
     return True
 
 

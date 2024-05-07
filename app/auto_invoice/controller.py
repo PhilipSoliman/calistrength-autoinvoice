@@ -82,7 +82,6 @@ class Controller(ViktorController):
         and payment data.
         """
         params.invoiceStep.foundInvoice = False
-        # client = params.invoiceStep.clientName
         invoiceParams = params.invoiceStep
         if invoiceParams.searchMethod == "Factuurperiode":
             clientName = params.invoiceStep.clientName
@@ -282,10 +281,5 @@ class Controller(ViktorController):
         sortedFinanceData["availableClients"] = financeData["availableClients"]
         sortedFinanceData["clientNumbers"] = financeData["clientNumbers"]
 
-        # for client, key in sortedFinanceData.items():
-        #     if key == "availableInvoiceNumbers":
-        #         sortedFinanceData[client]["availableInvoiceNumbers"] = list(
-        #             dict.fromkeys(client[key])  # remove duplicates
-        #         )
         pprint(sortedFinanceData)
         return sortedFinanceData
