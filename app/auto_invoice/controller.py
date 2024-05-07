@@ -142,44 +142,38 @@ class Controller(ViktorController):
     ####################################################
 
     @staticmethod
-    def unpackDataIntoDataItems(data: dict, level=0) -> DataGroup:
+    def unpackDataIntoDataItems(data: dict) -> DataGroup:
         """
         Unpack data into DataItems
         """
         dataItems = []
-        if level == 0:
-            clientNr = 0
-            assignmentNr = 0
-        if level == 1:
-            assignmentNr = 0
         for key, value in data.items():
-            if key == "availableClients":
-                continue
             if isinstance(value, dict):
-                if level == 0:
-                    clientNr += 1
-                    dataItems.append(
-                        DataItem(
-                            f"Client {clientNr}",
-                            key,
-                            subgroup=Controller.unpackDataIntoDataItems(
-                                value, level=level + 1
-                            ),
-                        )
+                dataItems.append(
+                    DataItem(
+                        key,
+                        "expand dict ->",
+                        subgroup=Controller.unpackDataIntoDataItems(value),
                     )
-                elif level == 1:
-                    assignmentNr += 1
-                    dataItems.append(
-                        DataItem(
-                            f"Opdracht {assignmentNr}",
-                            key,
-                            subgroup=Controller.unpackDataIntoDataItems(
-                                value, level=level + 1
-                            ),
-                        )
-                    )
-            else:
+                )
+            elif isinstance(value, list):
+                if not value:
+                    dataItems.append(DataItem(key, "empty list"))
+                    continue
+                dataDict = {}
+                for i, item in enumerate(value):
+                    label = f"{key}: Item {i+1}"
+                    dataDict[str(i)] = DataItem(label, item)
+                dataGroup = DataGroup(**dataDict)
+                dataItems.append(DataItem(key, "expand list ->", subgroup=dataGroup))
+            elif (
+                isinstance(value, str)
+                or isinstance(value, int)
+                or isinstance(value, float)
+            ):
                 dataItems.append(DataItem(key, value))
+            else:
+                raise UserError(f"Unknown data type {type(value)} in finance data")
         return DataGroup(*dataItems)
 
     def renderInvoiceWordFile(self, params, **kwargs) -> File:
