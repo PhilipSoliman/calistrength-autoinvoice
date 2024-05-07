@@ -1,6 +1,6 @@
 from pprint import pprint
 
-from munch import unmunchify
+from munch import Munch, unmunchify
 from viktor import ViktorController
 from viktor.api_v1 import FileResource
 from viktor.core import File, Storage, UserMessage
@@ -191,11 +191,21 @@ class Controller(ViktorController):
         to generate invoice for and which data to include in the invoice.
         """
         # TODO: construct list of rows containing payment data (custumer name, amount, date, tax rate etc.)
+        invoiceData = params.invoiceStep
+
+        clientAddres = Munch(
+            streetAndNumber="streetAndNumber", postalCode="postalCode", city="city"
+        )
+
         components = [
-            WordFileTag("invoiceDate", str(params.invoiceStep.invoiceDate)),
-            WordFileTag("expirationDate", str(params.invoiceStep.expirationDate)),
-            WordFileTag("invoiceNumber", params.invoiceStep.invoiceNumber),
-            WordFileTag("invoicePeriod", params.invoiceStep.invoicePeriod),
+            WordFileTag("clientName", invoiceData.clientName),
+            WordFileTag("invoiceDate", str()),
+            WordFileTag("invoicePeriod", str(invoiceData.invoicePeriod)),
+            WordFileTag("expirationDate", str()),
+            WordFileTag("invoiceNumber", invoiceData.invoiceNumber),
+            WordFileTag("clientLegalContact", str()),
+            WordFileTag("clientAddress", clientAddres),
+            WordFileTag("clientEmail", str()),
         ]
 
         return components
