@@ -3,6 +3,7 @@ venv
 
 # docx savefile
 app/lib/~$*.docx
+app/lib/~*.tmp
 
 # pycache
 __pycache__
