@@ -309,21 +309,22 @@ class Controller(ViktorController):
                 "pricesExcl",
                 "quantity",
             ]:  # data is a list of floats
-                floats = np.select(~empty, valueArray, default=-1)
-                financeData[itemKey] = convertExcelFloat(floats).tolist()
+                floats = valueArray[~empty]
+                valueArray[~empty] = convertExcelFloat(floats).tolist()
+                financeData[itemKey] = valueArray
             elif itemKey == "invoiceDates":  # data is a list of dates
                 values = valueArray.tolist()
+                financeData[itemKey] = []
                 for value in values:
                     if value != "None":
-                        financeData[itemKey] = convertOrdinalToDate(
-                            convertExcelOrdinal(int(value))
-                        )
+                        financeData[itemKey] += [
+                            convertOrdinalToDate(convertExcelOrdinal(int(value)))
+                        ]
                     else:
-                        financeData[itemKey] = value
+                        financeData[itemKey] += [value]
 
             else:  # unknown key
                 raise UserError(f"Unknown key {itemKey} in finance data sheet")
-        pprint(financeData)
         return Controller.sortFinanceData(financeData)
 
     @staticmethod
@@ -356,6 +357,7 @@ class Controller(ViktorController):
                 "priceExcl": financeData["pricesExcl"][i],
                 "invoiceNumber": invoiceNumber,
                 "quantity": financeData["quantity"][i],
+                "description": financeData["description"][i],
             }
             if (
                 invoiceNumber
@@ -367,5 +369,4 @@ class Controller(ViktorController):
         sortedFinanceData["availableClients"] = financeData["availableClients"]
         sortedFinanceData["clientNumbers"] = financeData["clientNumbers"]
 
-        pprint(sortedFinanceData)
         return sortedFinanceData
