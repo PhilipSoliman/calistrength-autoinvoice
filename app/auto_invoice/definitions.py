@@ -4,6 +4,7 @@ from calendar import month_name as MONTH_NAMES
 from datetime import date as Date
 from pprint import pprint
 
+import numpy as np
 from deep_translator import GoogleTranslator
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import InputViolation, UserError
@@ -54,19 +55,18 @@ def getAvailablePeriods(params, **kwargs):
     return periods
 
 
-def convertExcelOrdinal(excelDateNumber: str) -> str:
+def convertExcelOrdinal(excelDateNumber: int) -> int:
     """
     Convert Excel date number to human readable date
     """
-    excelOrdinal = int(excelDateNumber)
-    return str(excelOrdinal + ORDINAL_BASE_EXCEL)
+    return excelDateNumber + ORDINAL_BASE_EXCEL
 
 
-def convertOrdinalToDate(ordinal: str) -> str:
+def convertOrdinalToDate(ordinal: int) -> str:
     """
     Convert ordinal to date
     """
-    return Date.fromordinal(int(ordinal)).strftime(r"%d/%m/%Y")
+    return Date.fromordinal(ordinal).strftime(r"%d/%m/%Y")
 
 
 def convertDateToOrdinal(date: str) -> str:
@@ -78,11 +78,11 @@ def convertDateToOrdinal(date: str) -> str:
     return Date(y, m, d).toordinal()
 
 
-def convertExcelFloat(excelFloat: str) -> float:
+def convertExcelFloat(excelFloat: np.ndarray) -> float:
     """
     convert Excel-style float to regular float
     """
-    return float(excelFloat.replace(",", "."))
+    return np.char.replace(excelFloat, ",", ".").astype(np.float64)
 
 
 def getFinanceDataFromStorage() -> dict:

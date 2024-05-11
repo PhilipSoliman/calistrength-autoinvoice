@@ -1,5 +1,6 @@
 from pprint import pprint
 
+import numpy as np
 from munch import Munch, unmunchify
 from viktor import ViktorController
 from viktor.api_v1 import FileResource
@@ -229,7 +230,7 @@ class Controller(ViktorController):
 
                     # quantity
                     quantity = data["quantity"]
-                    currentPayment["quantity"] = quantity
+                    currentPayment["quantity"] = f"{quantity:.0f}"
 
                     # subtotal
                     subtotal = quantity * priceExcl
@@ -285,6 +286,9 @@ class Controller(ViktorController):
         for itemKey, dataString in financeData.items():
             if isinstance(dataString, str):
                 values = dataString.split(";")
+                valueArray = np.array(values)
+                empty = valueArray == ""
+                valueArray[empty] = None
             else:
                 raise UserError("Data values in finance sheet should be strings")
             if itemKey in [
@@ -292,23 +296,29 @@ class Controller(ViktorController):
                 "availableClients",
                 "clientNumbers",
                 "invoiceNumbers",
+                "description",
             ]:  # data is a list of strings
-                financeData[itemKey] = values[1:]
+                financeData[itemKey] = valueArray.tolist()
             elif itemKey in [
                 "pricesIncl",
                 "pricesExcl",
                 "quantity",
             ]:  # data is a list of floats
-                financeData[itemKey] = [
-                    convertExcelFloat(value) for value in values[1:]
-                ]
+                floats = np.select(~empty, valueArray, default=-1)
+                financeData[itemKey] = convertExcelFloat(floats).tolist()
             elif itemKey == "invoiceDates":  # data is a list of dates
-                financeData[itemKey] = [
-                    convertOrdinalToDate(convertExcelOrdinal(int(value)))
-                    for value in values[1:]
-                ]
+                values = valueArray.tolist()
+                for value in values:
+                    if value != "None":
+                        financeData[itemKey] = convertOrdinalToDate(
+                            convertExcelOrdinal(int(value))
+                        )
+                    else:
+                        financeData[itemKey] = value
+
             else:  # unknown key
                 raise UserError(f"Unknown key {itemKey} in finance data sheet")
+        pprint(financeData)
         return Controller.sortFinanceData(financeData)
 
     @staticmethod
@@ -331,26 +341,23 @@ class Controller(ViktorController):
         sortedFinanceData = {}
         for client in financeData["availableClients"]:
             sortedFinanceData[client] = {"availableInvoiceNumbers": []}
-        offset = 0
         for i, client in enumerate(financeData["clients"]):
-            index = i - offset
             if client not in financeData["availableClients"]:
-                offset += 1
                 continue
-            date = financeData["invoiceDates"][index]
-            invoiceNumber = financeData["invoiceNumbers"][index]
+            date = financeData["invoiceDates"][i]
+            invoiceNumber = financeData["invoiceNumbers"][i]
             sortedFinanceData[client][date] = {
                 "priceIncl": financeData["pricesIncl"][i],
                 "priceExcl": financeData["pricesExcl"][i],
                 "invoiceNumber": invoiceNumber,
-                "quantity": financeData["quantity"][index],
+                "quantity": financeData["quantity"][i],
             }
             if (
                 invoiceNumber
                 not in sortedFinanceData[client]["availableInvoiceNumbers"]
             ):
                 sortedFinanceData[client]["availableInvoiceNumbers"].append(
-                    financeData["invoiceNumbers"][index]
+                    financeData["invoiceNumbers"][i]
                 )
         sortedFinanceData["availableClients"] = financeData["availableClients"]
         sortedFinanceData["clientNumbers"] = financeData["clientNumbers"]
