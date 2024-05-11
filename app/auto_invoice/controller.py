@@ -28,6 +28,7 @@ from app.auto_invoice.definitions import (
     getInvoicePeriodFromNumber,
     getInvoicePeriods,
     getPeriodOrdinals,
+    removeSpecialCharacters,
     saveFinanceDataToStorage,
 )
 from app.auto_invoice.parametrization import Parametrization
@@ -139,7 +140,7 @@ class Controller(ViktorController):
         invoiceNumberStripped = params.invoiceStep.invoiceNumber.replace(".", "")
         clientName = params.invoiceStep.clientName
         # remove special characters from client name
-        clientName = "".join(letter for letter in clientName if letter.isalnum())
+        clientName = removeSpecialCharacters(clientName)
         fn = f"Factuur_{invoiceNumberStripped}_{clientName}_CALISTRENGTH.pdf"
         with word_file.open_binary() as f1:
             pdf_file = convert_word_to_pdf(f1)
@@ -256,7 +257,7 @@ class Controller(ViktorController):
                     total += priceIncl
 
         components = [
-            WordFileTag("clientName", invoiceData.clientName),
+            WordFileTag("clientName", removeSpecialCharacters(invoiceData.clientName)),
             WordFileTag("invoiceDate", invoiceDate.strftime(r"%d/%m/%Y")),
             WordFileTag("invoicePeriod", str(invoiceData.invoicePeriod)),
             WordFileTag("expirationDate", expirationDate),

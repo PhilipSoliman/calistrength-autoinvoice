@@ -281,3 +281,9 @@ def getPeriodOrdinals(period: int, year: str) -> tuple[int]:
     lastday = max(monthDays)
     end = Date(year, period + 1, lastday).toordinal()
     return start, end
+
+def removeSpecialCharacters(string: str) -> str:
+    """
+    Remove special characters from string
+    """
+    return "".join(e for e in string if e.isalnum())
