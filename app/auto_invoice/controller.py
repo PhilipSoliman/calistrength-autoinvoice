@@ -135,8 +135,12 @@ class Controller(ViktorController):
         Storage().set(storageKey, data=wordFile, scope="entity")
 
     def downloadInvoice(self, params, **kwargs):
-        word_file = self.renderInvoice(params)
-        fn = f"invoice-{self.getStorageKey(params)}.pdf"
+        word_file = self.renderInvoiceWordFile(params)
+        invoiceNumberStripped = params.invoiceStep.invoiceNumber.replace(".", "")
+        clientName = params.invoiceStep.clientName
+        # remove special characters from client name
+        clientName = "".join(letter for letter in clientName if letter.isalnum())
+        fn = f"Factuur_{invoiceNumberStripped}_{clientName}_CALISTRENGTH.pdf"
         with word_file.open_binary() as f1:
             pdf_file = convert_word_to_pdf(f1)
         return DownloadResult(pdf_file, fn)
