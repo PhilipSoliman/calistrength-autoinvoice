@@ -17,12 +17,16 @@ from viktor.views import DataGroup, DataItem, DataResult, DataView, PDFResult, P
 
 from app.auto_invoice.definitions import (
     checkInvoiceSetup,
+    convertDateToOrdinal,
     convertExcelFloat,
     convertExcelOrdinal,
     convertOrdinalToDate,
+    getFinanceDataAttributeFromStorage,
     getFinanceDataFromStorage,
     getInvoiceNumberFromPeriodAndIndex,
     getInvoicePeriodFromNumber,
+    getInvoicePeriods,
+    getPeriodOrdinals,
     saveFinanceDataToStorage,
 )
 from app.auto_invoice.parametrization import Parametrization
@@ -190,22 +194,75 @@ class Controller(ViktorController):
         Combine data from source excel file and user input. Idea is that user can choose which client
         to generate invoice for and which data to include in the invoice.
         """
-        # TODO: construct list of rows containing payment data (custumer name, amount, date, tax rate etc.)
         invoiceData = params.invoiceStep
 
+        # client adress
         clientAddres = Munch(
             streetAndNumber="streetAndNumber", postalCode="postalCode", city="city"
         )
 
+        # dates
+        invoiceDate = invoiceData.invoiceDate
+        invoiceDateOrdinal = invoiceDate.toordinal()
+        expirationDate = convertOrdinalToDate(invoiceDateOrdinal + 30)
+
+        # payment data
+        currentPayments = []
+        allPayments = getFinanceDataAttributeFromStorage(invoiceData.clientName)
+        periods = getInvoicePeriods(params)
+        periodNumber = periods.index(invoiceData.invoicePeriod)
+        start, end = getPeriodOrdinals(periodNumber, invoiceData.invoiceYear)
+        totalExcl = 0
+        tax = 0
+        total = 0
+        for date, data in allPayments.items():
+            if "/" in date:
+                currentPayment = {}
+                ordinal = convertDateToOrdinal(date)
+                if start <= ordinal <= end:
+                    # date
+                    currentPayment["date"] = date
+
+                    # exclusive price
+                    priceExcl = data["priceExcl"]
+                    currentPayment["price"] = f"{priceExcl:.2f}"
+
+                    # quantity
+                    quantity = data["quantity"]
+                    currentPayment["quantity"] = quantity
+
+                    # subtotal
+                    subtotal = quantity * priceExcl
+                    currentPayment["total"] = f"{subtotal:.2f}"
+
+                    # inclusive price
+                    priceIncl = data["priceIncl"]
+
+                    # taxrate
+                    taxrate = (priceIncl - priceExcl) / priceExcl * 100
+                    currentPayment["taxRate"] = f"{taxrate:.0f}"
+
+                    # save current payment
+                    currentPayments.append(currentPayment)
+
+                    # cumalatives
+                    totalExcl += subtotal
+                    tax += priceIncl - priceExcl
+                    total += priceIncl
+
         components = [
             WordFileTag("clientName", invoiceData.clientName),
-            WordFileTag("invoiceDate", str()),
+            WordFileTag("invoiceDate", invoiceDate.strftime(r"%d/%m/%Y")),
             WordFileTag("invoicePeriod", str(invoiceData.invoicePeriod)),
-            WordFileTag("expirationDate", str()),
+            WordFileTag("expirationDate", expirationDate),
             WordFileTag("invoiceNumber", invoiceData.invoiceNumber),
             WordFileTag("clientLegalContact", str()),
             WordFileTag("clientAddress", clientAddres),
             WordFileTag("clientEmail", str()),
+            WordFileTag("payments", currentPayments),
+            WordFileTag("totalExcl", f"{totalExcl:.2f}"),
+            WordFileTag("tax", f"{tax:.2f}"),
+            WordFileTag("total", f"{total:.2f}"),
         ]
 
         return components
@@ -237,7 +294,11 @@ class Controller(ViktorController):
                 "invoiceNumbers",
             ]:  # data is a list of strings
                 financeData[itemKey] = values[1:]
-            elif itemKey in ["pricesIncl", "pricesExcl"]:  # data is a list of floats
+            elif itemKey in [
+                "pricesIncl",
+                "pricesExcl",
+                "quantity",
+            ]:  # data is a list of floats
                 financeData[itemKey] = [
                     convertExcelFloat(value) for value in values[1:]
                 ]
@@ -270,23 +331,26 @@ class Controller(ViktorController):
         sortedFinanceData = {}
         for client in financeData["availableClients"]:
             sortedFinanceData[client] = {"availableInvoiceNumbers": []}
-
+        offset = 0
         for i, client in enumerate(financeData["clients"]):
+            index = i - offset
             if client not in financeData["availableClients"]:
+                offset += 1
                 continue
-            date = financeData["invoiceDates"][i]
-            invoiceNumber = financeData["invoiceNumbers"][i]
+            date = financeData["invoiceDates"][index]
+            invoiceNumber = financeData["invoiceNumbers"][index]
             sortedFinanceData[client][date] = {
                 "priceIncl": financeData["pricesIncl"][i],
                 "priceExcl": financeData["pricesExcl"][i],
                 "invoiceNumber": invoiceNumber,
+                "quantity": financeData["quantity"][index],
             }
             if (
                 invoiceNumber
                 not in sortedFinanceData[client]["availableInvoiceNumbers"]
             ):
                 sortedFinanceData[client]["availableInvoiceNumbers"].append(
-                    financeData["invoiceNumbers"][i]
+                    financeData["invoiceNumbers"][index]
                 )
         sortedFinanceData["availableClients"] = financeData["availableClients"]
         sortedFinanceData["clientNumbers"] = financeData["clientNumbers"]

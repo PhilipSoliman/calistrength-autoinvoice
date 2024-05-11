@@ -1,5 +1,6 @@
 from viktor.parametrization import (
     ActionButton,
+    DateField,
     DownloadButton,
     FileField,
     IsEqual,
@@ -64,9 +65,8 @@ class Parametrization(ViktorParametrization):
     invoiceStep.invoicePeriod = OptionField(
         "Invoice period",
         options=getInvoicePeriods,
-        visible=
-            IsNotEqual(Lookup("invoiceStep.invoiceYear"), None) 
-            and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
+        visible=IsNotEqual(Lookup("invoiceStep.invoiceYear"), None)
+        and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.invoiceIndex = OptionField(
         "Invoice index",
@@ -75,12 +75,12 @@ class Parametrization(ViktorParametrization):
         and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.lb2 = LineBreak()
+    invoiceStep.invoiceDate = DateField("Geef factuurdatum op")
+    # TODO: add dynamic array field for invoice items
+    invoiceStep.lb3 = LineBreak()
     invoiceStep.setupInvoiceButton = SetParamsButton(
         "Factuur Opstellen", method="setupInvoice"
     )
-    # TODO: add dynamic array field for invoice items
-    invoiceStep.expirationDate = OptionField("Vervaldatum", options=[], visible=False)
-    invoiceStep.lb3 = LineBreak()
     invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")
     invoiceStep.saveInvoice = ActionButton("Factuur opslaan", method="saveInvoice")
     invoiceStep.downloadInvoice = DownloadButton(

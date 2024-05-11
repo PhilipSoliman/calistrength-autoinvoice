@@ -8,7 +8,6 @@ from deep_translator import GoogleTranslator
 from viktor.core import File, Storage, UserMessage
 from viktor.errors import InputViolation, UserError
 
-
 MONTH_NAMES = MONTH_NAMES[1:]  # month_names starts with empty string
 
 START_YEAR = 2024
@@ -67,7 +66,7 @@ def convertOrdinalToDate(ordinal: str) -> str:
     """
     Convert ordinal to date
     """
-    return Date.fromordinal(int(ordinal)).strftime(r"%d/%m/%y")
+    return Date.fromordinal(int(ordinal)).strftime(r"%d/%m/%Y")
 
 
 def convertDateToOrdinal(date: str) -> str:
@@ -75,7 +74,8 @@ def convertDateToOrdinal(date: str) -> str:
     Convert date to ordinal
     """
     d, m, y = [int(i) for i in date.split("/")]
-    return Date(d, m, y).toordinal()
+    y += 2000
+    return Date(y, m, d).toordinal()
 
 
 def convertExcelFloat(excelFloat: str) -> float:
@@ -193,6 +193,7 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
         params.invoiceStep.get("invoiceYear"),
         params.invoiceStep.get("invoicePeriod"),
         params.invoiceStep.get("invoiceIndex"),
+        params.invoiceStep.get("invoiceDate"),
     ]
     if None in invoiceSetup:
         UserMessage.warning("Missing invoice setup parameters")
@@ -203,7 +204,7 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
     if (clientData := financeData.get(params.invoiceStep.clientName)) is None:
         UserMessage.warning("Client not found in finance data")
         return False
-    
+
     return True
 
 
@@ -267,3 +268,16 @@ def getYearNr(year: int) -> str:
 
 def getYearFromYearNr(yearNr: int | str) -> int:
     return int(yearNr) + 2000
+
+
+def getPeriodOrdinals(period: int, year: str) -> tuple[int]:
+    """
+    Get ordinals for start and end of period
+    """
+    year = int(year)
+    start = Date(year, period + 1, 1).toordinal()
+    cal = Calendar()
+    monthDays = list(cal.itermonthdays(year, period + 1))
+    lastday = max(monthDays)
+    end = Date(year, period + 1, lastday).toordinal()
+    return start, end
