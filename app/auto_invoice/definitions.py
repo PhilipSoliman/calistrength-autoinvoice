@@ -287,3 +287,9 @@ def removeSpecialCharacters(string: str) -> str:
     Remove special characters from string
     """
     return "".join(e for e in string if e.isalnum())
+
+def generateInvoiceName(params) -> str:
+    invoiceNumberStripped = params.invoiceStep.invoiceNumber.replace(".", "")
+    clientName = params.invoiceStep.clientName
+    clientName = removeSpecialCharacters(clientName)
+    return f"Factuur_{invoiceNumberStripped}_{clientName}_CALISTRENGTH.docx"

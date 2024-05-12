@@ -22,6 +22,7 @@ from app.auto_invoice.definitions import (
     convertExcelFloat,
     convertExcelOrdinal,
     convertOrdinalToDate,
+    generateInvoiceName,
     getFinanceDataAttributeFromStorage,
     getFinanceDataFromStorage,
     getInvoiceNumberFromPeriodAndIndex,
@@ -122,29 +123,30 @@ class Controller(ViktorController):
         """
         Load invoice from storage
         """
-        storageKey = self.getStorageKey(params)
-        if storageKey not in Storage().list(scope="entity"):
-            raise UserError(f"No invoice {storageKey} found in storage")
-        return Storage().get(storageKey, scope="entity")
+        key = generateInvoiceName(params)
+        if key not in Storage().list(scope="entity"):
+            raise UserError(f"No invoice {key} found in storage")
+        return Storage().get(key, scope="entity")
 
     def saveInvoice(self, params, **kwargs) -> None:
         """
         Save rendered invoice to storage
         """
-        storageKey = self.getStorageKey(params)
-        wordFile = self.renderInvoice(params)
-        Storage().set(storageKey, data=wordFile, scope="entity")
+        wordFile = self.renderInvoiceWordFile(params)
+        key = generateInvoiceName(params)
+        Storage().set(key, data=wordFile, scope="entity")
 
-    def downloadInvoice(self, params, **kwargs):
+    def downloadInvoicePDF(self, params, **kwargs):
         word_file = self.renderInvoiceWordFile(params)
-        invoiceNumberStripped = params.invoiceStep.invoiceNumber.replace(".", "")
-        clientName = params.invoiceStep.clientName
-        # remove special characters from client name
-        clientName = removeSpecialCharacters(clientName)
-        fn = f"Factuur_{invoiceNumberStripped}_{clientName}_CALISTRENGTH.pdf"
+        fn = generateInvoiceName(params)
         with word_file.open_binary() as f1:
             pdf_file = convert_word_to_pdf(f1)
         return DownloadResult(pdf_file, fn)
+
+    def downLoadInvoiceWord(self, params, **kwargs):
+        word_file = self.renderInvoiceWordFile(params)
+        fn = generateInvoiceName(params)
+        return DownloadResult(word_file, fn)
 
     ####################################################
     ################# Helper functions #################
@@ -293,7 +295,7 @@ class Controller(ViktorController):
                 values = dataString.split(";")
                 valueArray = np.array(values)
                 empty = valueArray == ""
-                valueArray[empty] = None
+                valueArray[empty] = "NA"
             else:
                 raise UserError("Data values in finance sheet should be strings")
             if itemKey in [
@@ -302,6 +304,11 @@ class Controller(ViktorController):
                 "clientNumbers",
                 "invoiceNumbers",
                 "description",
+                "clientLegalContact",
+                "clientStreetAndNumber",
+                "clientPostalCode",
+                "clientCity",
+                "clientEmail",
             ]:  # data is a list of strings
                 financeData[itemKey] = valueArray.tolist()
             elif itemKey in [
@@ -316,7 +323,7 @@ class Controller(ViktorController):
                 values = valueArray.tolist()
                 financeData[itemKey] = []
                 for value in values:
-                    if value != "None":
+                    if value != "NA":
                         financeData[itemKey] += [
                             convertOrdinalToDate(convertExcelOrdinal(int(value)))
                         ]
@@ -345,6 +352,7 @@ class Controller(ViktorController):
         sort by clients first then by date. This is also the structure of database
         """
         sortedFinanceData = {}
+        print(financeData["availableClients"])
         for client in financeData["availableClients"]:
             sortedFinanceData[client] = {"availableInvoiceNumbers": []}
         for i, client in enumerate(financeData["clients"]):
@@ -366,7 +374,28 @@ class Controller(ViktorController):
                 sortedFinanceData[client]["availableInvoiceNumbers"].append(
                     financeData["invoiceNumbers"][i]
                 )
-        sortedFinanceData["availableClients"] = financeData["availableClients"]
-        sortedFinanceData["clientNumbers"] = financeData["clientNumbers"]
+        clients = np.array(financeData["availableClients"])
+        sortedFinanceData["availableClients"] = clients[clients != "NA"].tolist()
+        clientNumbers = np.array(financeData["clientNumbers"])
+        sortedFinanceData["clientNumbers"] = clientNumbers[
+            clientNumbers != "NA"
+        ].tolist()
+
+        clientLegalContact = np.array(financeData["clientLegalContact"])
+        sortedFinanceData["clientLegalContact"] = clientLegalContact[
+            clientLegalContact != "NA"
+        ].tolist()
+        clientStreetAndNumber = np.array(financeData["clientStreetAndNumber"])
+        sortedFinanceData["clientStreetAndNumber"] = clientStreetAndNumber[
+            clientStreetAndNumber != "NA"
+        ].tolist()
+        clientPostalCode = np.array(financeData["clientPostalCode"])
+        sortedFinanceData["clientPostalCode"] = clientPostalCode[
+            clientPostalCode != "NA"
+        ].tolist()
+        clientCity = np.array(financeData["clientCity"])
+        sortedFinanceData["clientCity"] = clientCity[clientCity != "NA"].tolist()
+        clientEmail = np.array(financeData["clientEmail"])
+        sortedFinanceData["clientEmail"] = clientEmail[clientEmail != "NA"].tolist()
 
         return sortedFinanceData

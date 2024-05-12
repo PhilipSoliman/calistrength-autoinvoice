@@ -83,6 +83,9 @@ class Parametrization(ViktorParametrization):
     )
     invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")
     invoiceStep.saveInvoice = ActionButton("Factuur opslaan", method="saveInvoice")
-    invoiceStep.downloadInvoice = DownloadButton(
-        "Factuur downloaden", method="downloadInvoice"
+    invoiceStep.downloadInvoicePDF = DownloadButton(
+        "Factuur downloaden (pdf)", method="downloadInvoicePDF"
+    )
+    invoiceStep.downLoadInvoiceWord = DownloadButton(
+        "Factuur downloaden (docx)", method="downloadInvoiceWord"
     )
