@@ -73,7 +73,7 @@ class Controller(ViktorController):
         saveFinanceDataToStorage(newFinanceData)
         UserMessage.success("Finance data updated")
 
-    @DataView("Finance data", duration_guess=1)
+    @DataView("Finance data", duration_guess=5)
     def viewFinanceData(self, params, **kwargs) -> SpreadsheetResult:
         """
         View finance data
@@ -204,10 +204,15 @@ class Controller(ViktorController):
         """
         invoiceData = params.invoiceStep
 
-        # client adress
+        # client details
+        clientData = Munch(getFinanceDataAttributeFromStorage(invoiceData.clientName))
         clientAddres = Munch(
-            streetAndNumber="streetAndNumber", postalCode="postalCode", city="city"
+            streetAndNumber=clientData.streetAndNumber,
+            postalCode=clientData.postalCode,
+            city=clientData.city,
         )
+        legalContact = clientData.legalContact
+        email = clientData.email
 
         # dates
         invoiceDate = invoiceData.invoiceDate
@@ -216,14 +221,14 @@ class Controller(ViktorController):
 
         # payment data
         currentPayments = []
-        allPayments = getFinanceDataAttributeFromStorage(invoiceData.clientName)
+        clientData = getFinanceDataAttributeFromStorage(invoiceData.clientName)
         periods = getInvoicePeriods(params)
         periodNumber = periods.index(invoiceData.invoicePeriod)
         start, end = getPeriodOrdinals(periodNumber, invoiceData.invoiceYear)
         totalExcl = 0
         tax = 0
         total = 0
-        for date, data in allPayments.items():
+        for date, data in clientData.items():
             if "/" in date:
                 currentPayment = {}
                 ordinal = convertDateToOrdinal(date)
@@ -232,11 +237,11 @@ class Controller(ViktorController):
                     currentPayment["date"] = date
 
                     # exclusive price
-                    priceExcl = data["priceExcl"]
+                    priceExcl = float(data["priceExcl"])
                     currentPayment["price"] = f"{priceExcl:.2f}"
 
                     # quantity
-                    quantity = data["quantity"]
+                    quantity = int(data["quantity"])
                     currentPayment["quantity"] = f"{quantity:.0f}"
 
                     # subtotal
@@ -244,11 +249,15 @@ class Controller(ViktorController):
                     currentPayment["total"] = f"{subtotal:.2f}"
 
                     # inclusive price
-                    priceIncl = data["priceIncl"]
+                    priceIncl = float(data["priceIncl"])
 
                     # taxrate
                     taxrate = (priceIncl - priceExcl) / priceExcl * 100
                     currentPayment["taxRate"] = f"{taxrate:.0f}"
+
+                    # description
+                    description = data["description"]
+                    currentPayment["description"] = description
 
                     # save current payment
                     currentPayments.append(currentPayment)
@@ -259,14 +268,16 @@ class Controller(ViktorController):
                     total += priceIncl
 
         components = [
-            WordFileTag("clientName", removeSpecialCharacters(invoiceData.clientName)),
+            WordFileTag(
+                "clientName", rf"{invoiceData.clientName}"
+            ),  # removeSpecialCharacters(invoiceData.clientName)),
             WordFileTag("invoiceDate", invoiceDate.strftime(r"%d/%m/%Y")),
             WordFileTag("invoicePeriod", str(invoiceData.invoicePeriod)),
             WordFileTag("expirationDate", expirationDate),
             WordFileTag("invoiceNumber", invoiceData.invoiceNumber),
-            WordFileTag("clientLegalContact", str()),
+            WordFileTag("clientLegalContact", rf"{legalContact}"),
             WordFileTag("clientAddress", clientAddres),
-            WordFileTag("clientEmail", str()),
+            WordFileTag("clientEmail", rf"{email}"),
             WordFileTag("payments", currentPayments),
             WordFileTag("totalExcl", f"{totalExcl:.2f}"),
             WordFileTag("tax", f"{tax:.2f}"),
@@ -352,7 +363,6 @@ class Controller(ViktorController):
         sort by clients first then by date. This is also the structure of database
         """
         sortedFinanceData = {}
-        print(financeData["availableClients"])
         for client in financeData["availableClients"]:
             sortedFinanceData[client] = {"availableInvoiceNumbers": []}
         for i, client in enumerate(financeData["clients"]):
@@ -382,20 +392,32 @@ class Controller(ViktorController):
         ].tolist()
 
         clientLegalContact = np.array(financeData["clientLegalContact"])
-        sortedFinanceData["clientLegalContact"] = clientLegalContact[
-            clientLegalContact != "NA"
-        ].tolist()
+        clientLegalContact = clientLegalContact[clientLegalContact != "NA"].tolist()
         clientStreetAndNumber = np.array(financeData["clientStreetAndNumber"])
-        sortedFinanceData["clientStreetAndNumber"] = clientStreetAndNumber[
+        clientStreetAndNumber = clientStreetAndNumber[
             clientStreetAndNumber != "NA"
         ].tolist()
         clientPostalCode = np.array(financeData["clientPostalCode"])
-        sortedFinanceData["clientPostalCode"] = clientPostalCode[
-            clientPostalCode != "NA"
-        ].tolist()
+        clientPostalCode = clientPostalCode[clientPostalCode != "NA"].tolist()
         clientCity = np.array(financeData["clientCity"])
-        sortedFinanceData["clientCity"] = clientCity[clientCity != "NA"].tolist()
+        clientCity = clientCity[clientCity != "NA"].tolist()
         clientEmail = np.array(financeData["clientEmail"])
-        sortedFinanceData["clientEmail"] = clientEmail[clientEmail != "NA"].tolist()
+        clientEmail = clientEmail[clientEmail != "NA"].tolist()
+
+        clients = clients.tolist()
+        for client in sortedFinanceData["availableClients"]:
+            clientIndex = clients.index(client)
+            try:
+                sortedFinanceData[client]["legalContact"] = clientLegalContact[
+                    clientIndex
+                ]
+                sortedFinanceData[client]["streetAndNumber"] = clientStreetAndNumber[
+                    clientIndex
+                ]
+                sortedFinanceData[client]["postalCode"] = clientPostalCode[clientIndex]
+                sortedFinanceData[client]["city"] = clientCity[clientIndex]
+                sortedFinanceData[client]["email"] = clientEmail[clientIndex]
+            except IndexError:
+                UserMessage.warning(f"Client {client} is missing contact information")
 
         return sortedFinanceData

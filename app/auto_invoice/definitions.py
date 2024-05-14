@@ -26,7 +26,9 @@ def getAvailableClients(params, **kwargs):
     """
     Get list of available clients from finance data
     """
-    return getFinanceDataAttributeFromStorage("availableClients")
+    if data := getFinanceDataAttributeFromStorage("availableClients"):
+        return data
+    return []
 
 
 def getAvailableDates(params, **kwargs):
@@ -74,7 +76,7 @@ def convertDateToOrdinal(date: str) -> str:
     Convert date to ordinal
     """
     d, m, y = [int(i) for i in date.split("/")]
-    y += 2000
+    # y = getYearFromYearNr(y)
     return Date(y, m, d).toordinal()
 
 
@@ -92,6 +94,7 @@ def getFinanceDataFromStorage() -> dict:
     storage = Storage()
     if "financeData" not in storage.list(scope="entity"):
         UserMessage.warning("Could not find finance data in storage")
+        return {}
     financeDataFile = storage.get("financeData", scope="entity")
     return json.loads(financeDataFile.getvalue())
 
@@ -234,9 +237,11 @@ def getavailableInvoiceNumbers(params, **kwargs) -> list[str]:
     """
     Get list of available invoice numbers from finance data and given client
     """
-    if clientData := getFinanceDataAttributeFromStorage(
-        params.invoiceStep.get("clientName")
-    ):
+    if (
+        clientData := getFinanceDataAttributeFromStorage(
+            params.invoiceStep.get("clientName")
+        )
+    ) is not None:
         return clientData["availableInvoiceNumbers"]
     return []
 
@@ -282,11 +287,13 @@ def getPeriodOrdinals(period: int, year: str) -> tuple[int]:
     end = Date(year, period + 1, lastday).toordinal()
     return start, end
 
+
 def removeSpecialCharacters(string: str) -> str:
     """
     Remove special characters from string
     """
     return "".join(e for e in string if e.isalnum())
+
 
 def generateInvoiceName(params) -> str:
     invoiceNumberStripped = params.invoiceStep.invoiceNumber.replace(".", "")
