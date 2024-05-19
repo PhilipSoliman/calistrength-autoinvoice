@@ -87,5 +87,5 @@ class Parametrization(ViktorParametrization):
         "Factuur downloaden (pdf)", method="downloadInvoicePDF"
     )
     invoiceStep.downLoadInvoiceWord = DownloadButton(
-        "Factuur downloaden (docx)", method="downloadInvoiceWord"
+        "Factuur downloaden (docx)", method="downLoadInvoiceWord"
     )

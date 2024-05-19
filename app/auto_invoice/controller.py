@@ -236,15 +236,14 @@ class Controller(ViktorController):
                     # date
                     currentPayment["date"] = date
 
-                    # exclusive price
-                    priceExcl = float(data["priceExcl"])
-                    currentPayment["price"] = f"{priceExcl:.2f}"
-
                     # quantity
                     quantity = int(data["quantity"])
                     currentPayment["quantity"] = f"{quantity:.0f}"
 
-                    # subtotal
+                    # exclusive price
+                    priceExcl = float(data["priceExcl"]) / quantity
+                    currentPayment["price"] = f"{priceExcl:.2f}"
+
                     subtotal = quantity * priceExcl
                     currentPayment["total"] = f"{subtotal:.2f}"
 
@@ -269,7 +268,7 @@ class Controller(ViktorController):
 
         components = [
             WordFileTag(
-                "clientName", rf"{invoiceData.clientName}"
+                "clientName", str(rf"{invoiceData.clientName}")
             ),  # removeSpecialCharacters(invoiceData.clientName)),
             WordFileTag("invoiceDate", invoiceDate.strftime(r"%d/%m/%Y")),
             WordFileTag("invoicePeriod", str(invoiceData.invoicePeriod)),
