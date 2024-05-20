@@ -251,7 +251,7 @@ class Controller(ViktorController):
                     priceIncl = float(data["priceIncl"])
 
                     # taxrate
-                    taxrate = (priceIncl - priceExcl) / priceExcl * 100
+                    taxrate = (priceIncl - subtotal) / subtotal * 100
                     currentPayment["taxRate"] = f"{taxrate:.0f}"
 
                     # description
@@ -263,12 +263,12 @@ class Controller(ViktorController):
 
                     # cumalatives
                     totalExcl += subtotal
-                    tax += priceIncl - priceExcl
+                    tax += priceIncl - subtotal
                     total += priceIncl
 
         components = [
             WordFileTag(
-                "clientName", str(rf"{invoiceData.clientName}")
+                "clientName", rf"{invoiceData.clientName}"
             ),  # removeSpecialCharacters(invoiceData.clientName)),
             WordFileTag("invoiceDate", invoiceDate.strftime(r"%d/%m/%Y")),
             WordFileTag("invoicePeriod", str(invoiceData.invoicePeriod)),
