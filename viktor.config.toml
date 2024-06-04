@@ -6,3 +6,5 @@ app_type = 'tree'
 # packages = []
 python_version = '3.11'
 # welcome_text = 'welcome.md'
+
+registered_name = 'calistrength-autoinvoice'
