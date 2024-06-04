@@ -138,14 +138,14 @@ class Controller(ViktorController):
 
     def downloadInvoicePDF(self, params, **kwargs):
         word_file = self.renderInvoiceWordFile(params)
-        fn = generateInvoiceName(params)
+        fn = generateInvoiceName(params, fn_ext="pdf")
         with word_file.open_binary() as f1:
             pdf_file = convert_word_to_pdf(f1)
         return DownloadResult(pdf_file, fn)
 
     def downLoadInvoiceWord(self, params, **kwargs):
         word_file = self.renderInvoiceWordFile(params)
-        fn = generateInvoiceName(params)
+        fn = generateInvoiceName(params, fn_ext="docx")
         return DownloadResult(word_file, fn)
 
     ####################################################

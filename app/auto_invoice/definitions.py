@@ -128,9 +128,9 @@ def getInvoiceYears(params, **kwargs) -> list[str]:
     years = []
     if availableInvoiceNumbers := clientData.get("availableInvoiceNumbers"):
         for invoiceNumber in availableInvoiceNumbers:
-            yearNr = invoiceNumber.split(".")[3]
+            yearNr = invoiceNumber.split(".")[-1]
             year = getYearFromYearNr(yearNr)
-            if year not in years:
+            if year not in years and year is not None:
                 years.append(getYearFromYearNr(yearNr))
     return years
 
@@ -170,6 +170,9 @@ def getInvoiceIndices(params, **kwargs) -> list[str]:
     )
     indices = []
     for invoiceNumber in clientData["availableInvoiceNumbers"]:
+        elements = invoiceNumber.split(".")
+        if len(elements) != 4:
+            continue
         _, index, _periodNr, _yearNr = invoiceNumber.split(".")
         if (_periodNr == periodNr) and (_yearNr == yearNr) and index not in indices:
             indices.append(index)
@@ -251,9 +254,7 @@ def getClientNr(clientName: str) -> str:
     Get client number
     """
     clients = getFinanceDataAttributeFromStorage("availableClients")
-    pprint(getFinanceDataFromStorage())
     numbers = getFinanceDataAttributeFromStorage("clientNumbers")
-    print(numbers)
     return numbers[clients.index(clientName)]
 
 
@@ -272,7 +273,11 @@ def getYearNr(year: int) -> str:
 
 
 def getYearFromYearNr(yearNr: int | str) -> int:
-    return int(yearNr) + 2000
+    try:
+        yearNr = int(yearNr)
+        return int(yearNr) + 2000
+    except ValueError:
+        return
 
 
 def getPeriodOrdinals(period: int, year: str) -> tuple[int]:
@@ -295,8 +300,8 @@ def removeSpecialCharacters(string: str) -> str:
     return "".join(e for e in string if e.isalnum())
 
 
-def generateInvoiceName(params) -> str:
+def generateInvoiceName(params, fn_ext: str) -> str:
     invoiceNumberStripped = params.invoiceStep.invoiceNumber.replace(".", "")
     clientName = params.invoiceStep.clientName
     clientName = removeSpecialCharacters(clientName)
-    return f"Factuur_{invoiceNumberStripped}_{clientName}_CALISTRENGTH.docx"
+    return f"Factuur_{invoiceNumberStripped}_{clientName}_CALISTRENGTH.{fn_ext}"

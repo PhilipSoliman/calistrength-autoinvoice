@@ -78,11 +78,18 @@ class Parametrization(ViktorParametrization):
     invoiceStep.invoiceDate = DateField("Geef factuurdatum op")
     # TODO: add dynamic array field for invoice items
     invoiceStep.lb3 = LineBreak()
+    invoiceStep.setupInvoiceText = Text(
+        "Wanneer de factuurgegevens hierboven zijn ingevuld, klik dan op de onderstaande knop om de factuur op te stellen."
+        + "\n Hierna kan de factuur gegenereerd worden door in het rechter scherm op 'Update' te klikken."
+        "\n Zodra gegevens worden aangepast, moet de factuur opnieuw worden opgesteld."
+    )
     invoiceStep.setupInvoiceButton = SetParamsButton(
-        "Factuur Opstellen", method="setupInvoice"
+        "Factuur opstellen", method="setupInvoice"
     )
     invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")
-    invoiceStep.saveInvoice = ActionButton("Factuur opslaan", method="saveInvoice")
+    invoiceStep.saveInvoice = ActionButton(
+        "Factuur opslaan (database)", method="saveInvoice"
+    )
     invoiceStep.downloadInvoicePDF = DownloadButton(
         "Factuur downloaden (pdf)", method="downloadInvoicePDF"
     )
