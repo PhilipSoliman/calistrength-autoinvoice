@@ -237,8 +237,8 @@ class Controller(ViktorController):
                     currentPayment["date"] = date
 
                     # quantity
-                    quantity = int(data["quantity"])
-                    currentPayment["quantity"] = f"{quantity:.0f}"
+                    quantity = float(data["quantity"])
+                    currentPayment["quantity"] = f"{quantity:.1f}"
 
                     # exclusive price
                     priceExcl = float(data["priceExcl"]) / quantity
