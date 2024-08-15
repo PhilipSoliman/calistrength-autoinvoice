@@ -1,16 +1,7 @@
-from pprint import pprint
-
-import numpy as np
 from munch import Munch, unmunchify
 from viktor import ViktorController
-from viktor.api_v1 import FileResource
-from viktor.core import File, Storage, UserMessage
+from viktor.core import File, UserMessage
 from viktor.errors import UserError
-from viktor.external.spreadsheet import (
-    SpreadsheetCalculation,
-    SpreadsheetCalculationInput,
-    SpreadsheetResult,
-)
 from viktor.external.word import WordFileTag, render_word_file
 from viktor.result import DownloadResult, SetParamsResult
 from viktor.utils import convert_word_to_pdf
@@ -19,19 +10,13 @@ from viktor.views import DataGroup, DataItem, DataResult, DataView, PDFResult, P
 from app.auto_invoice.definitions import (
     checkInvoiceSetup,
     convertDateToOrdinal,
-    convertExcelFloat,
-    convertExcelOrdinal,
-    convertOrdinalToDate,
     generateInvoiceName,
-    getFinanceDataAttributeFromStorage,
-    getFinanceDataFromStorage,
     getInvoiceNumberFromPeriodAndIndex,
     getInvoicePeriodFromNumber,
     getInvoicePeriods,
     getPeriodOrdinals,
-    removeSpecialCharacters,
-    saveFinanceDataToStorage,
 )
+from app.auto_invoice.excel_reader import ExcelReader
 from app.auto_invoice.parametrization import Parametrization
 from app.helper import pyutils
 
@@ -40,45 +25,12 @@ class Controller(ViktorController):
     label = "autoInvoice"
     parametrization = Parametrization
 
-    def updateFinanceData(self, params, **kwargs) -> None:
-        """
-        Update finance data in storage
-        """
-        oldFinanceData = {}
-        financeData = self.getFinanceDataExcel(params)
-        storage = Storage()
-        if "financeData" in storage.list(scope="entity"):
-            oldFinanceData = getFinanceDataFromStorage()
-
-        # compare old and new data
-        if financeData == oldFinanceData:
-            UserMessage.info("No changes detected in finance data")
-            return
-        else:
-            UserMessage.info("New clients data detected")
-
-        # update finance data
-        UserMessage.info("Updating finance data")
-        newFinanceData = dict(oldFinanceData)
-        for client in financeData["availableClients"]:
-            if client not in newFinanceData:
-                newFinanceData[client] = financeData[client]
-            else:
-                newFinanceData[client].update(financeData[client])
-
-        newFinanceData["availableClients"] = financeData["availableClients"]
-        newFinanceData["clientNumbers"] = financeData["clientNumbers"]
-
-        # save new finance data
-        saveFinanceDataToStorage(newFinanceData)
-        UserMessage.success("Finance data updated")
-
     @DataView("Finance data", duration_guess=5)
-    def viewFinanceData(self, params, **kwargs) -> SpreadsheetResult:
+    def viewFinanceData(self, params, **kwargs) -> DataResult:
         """
         View finance data
         """
-        financeData = getFinanceDataFromStorage()
+        financeData = ExcelReader.readFinanceSheet(params.uploadStep.financeSheet)
         return DataResult(Controller.unpackDataIntoDataItems(financeData))
 
     def setupInvoice(self, params, **kwargs) -> SetParamsResult:
@@ -88,7 +40,6 @@ class Controller(ViktorController):
         such that downstream functions can find all the relevant assignments
         and payment data.
         """
-        params.invoiceStep.foundInvoice = False
         invoiceParams = params.invoiceStep
         if invoiceParams.searchMethod == "Factuurperiode":
             clientName = params.invoiceStep.clientName
@@ -96,7 +47,7 @@ class Controller(ViktorController):
             year = params.invoiceStep.invoiceYear
             index = params.invoiceStep.invoiceIndex
             invoiceParams.invoiceNumber = getInvoiceNumberFromPeriodAndIndex(
-                clientName, index, period, year
+                params, clientName, index, period, year
             )
         if invoiceParams.searchMethod == "Factuurnummer":
             index, period, year = getInvoicePeriodFromNumber(
@@ -119,23 +70,6 @@ class Controller(ViktorController):
         else:
             raise UserError("Stel eerst de factuur op voordat je deze kunt bekijken")
 
-    def loadInvoice(self, params) -> File:
-        """
-        Load invoice from storage
-        """
-        key = generateInvoiceName(params)
-        if key not in Storage().list(scope="entity"):
-            raise UserError(f"No invoice {key} found in storage")
-        return Storage().get(key, scope="entity")
-
-    def saveInvoice(self, params, **kwargs) -> None:
-        """
-        Save rendered invoice to storage
-        """
-        wordFile = self.renderInvoiceWordFile(params)
-        key = generateInvoiceName(params)
-        Storage().set(key, data=wordFile, scope="entity")
-
     def downloadInvoicePDF(self, params, **kwargs):
         word_file = self.renderInvoiceWordFile(params)
         fn = generateInvoiceName(params, fn_ext="pdf")
@@ -147,10 +81,6 @@ class Controller(ViktorController):
         word_file = self.renderInvoiceWordFile(params)
         fn = generateInvoiceName(params, fn_ext="docx")
         return DownloadResult(word_file, fn)
-
-    ####################################################
-    ################# Helper functions #################
-    ####################################################
 
     @staticmethod
     def unpackDataIntoDataItems(data: dict) -> DataGroup:
@@ -191,8 +121,8 @@ class Controller(ViktorController):
         """
         Render invoice using template with most up to date input
         """
-        template_dir = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
-        with open(template_dir, "rb") as template:
+        template_path = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
+        with open(template_path, "rb") as template:
             result = render_word_file(template, self.gatherInvoiceComponents(params))
         return result
 
@@ -205,7 +135,8 @@ class Controller(ViktorController):
         invoiceData = params.invoiceStep
 
         # client details
-        clientData = Munch(getFinanceDataAttributeFromStorage(invoiceData.clientName))
+        financeData = ExcelReader.readFinanceSheet(params.uploadStep.financeSheet)
+        clientData = Munch(financeData[invoiceData.clientName])
         clientAddres = Munch(
             streetAndNumber=clientData.streetAndNumber,
             postalCode=clientData.postalCode,
@@ -217,11 +148,10 @@ class Controller(ViktorController):
         # dates
         invoiceDate = invoiceData.invoiceDate
         invoiceDateOrdinal = invoiceDate.toordinal()
-        expirationDate = convertOrdinalToDate(invoiceDateOrdinal + 30)
+        expirationDate = ExcelReader._convertOrdinalToDate(invoiceDateOrdinal + 30)
 
         # payment data
         currentPayments = []
-        clientData = getFinanceDataAttributeFromStorage(invoiceData.clientName)
         periods = getInvoicePeriods(params)
         periodNumber = periods.index(invoiceData.invoicePeriod)
         start, end = getPeriodOrdinals(periodNumber, invoiceData.invoiceYear)
@@ -237,8 +167,8 @@ class Controller(ViktorController):
                     currentPayment["date"] = date
 
                     # quantity
-                    quantity = int(data["quantity"])
-                    currentPayment["quantity"] = f"{quantity:.0f}"
+                    quantity = float(data["quantity"])
+                    currentPayment["quantity"] = f"{quantity:.1f}"
 
                     # exclusive price
                     priceExcl = float(data["priceExcl"]) / quantity
@@ -284,139 +214,3 @@ class Controller(ViktorController):
         ]
 
         return components
-
-    def getStorageKey(self, params) -> str:
-        """
-        Get storage key for invoice
-        """
-        return f"{params.invoiceStep.clientName}-{params.invoiceStep.invoiceNumber}"
-
-    def getFinanceDataExcel(self, params, **kwargs) -> SpreadsheetResult:
-        """
-        Load finance data from uploaded excel file. Optionally pass any inputs from user
-        (Not implemented yet)
-        """
-        inputs = [SpreadsheetCalculationInput("clientName", "")]
-        financeFile = Controller.obtainFileFromResource(params.uploadStep.financeSheet)
-        financeSheet = SpreadsheetCalculation(financeFile, inputs)
-        financeData = financeSheet.evaluate(include_filled_file=False).values
-        for itemKey, dataString in financeData.items():
-            if isinstance(dataString, str):
-                values = dataString.split(";")
-                valueArray = np.array(values)
-                empty = valueArray == ""
-                valueArray[empty] = "NA"
-            else:
-                raise UserError("Data values in finance sheet should be strings")
-            if itemKey in [
-                "clients",
-                "availableClients",
-                "clientNumbers",
-                "invoiceNumbers",
-                "description",
-                "clientLegalContact",
-                "clientStreetAndNumber",
-                "clientPostalCode",
-                "clientCity",
-                "clientEmail",
-            ]:  # data is a list of strings
-                financeData[itemKey] = valueArray.tolist()
-            elif itemKey in [
-                "pricesIncl",
-                "pricesExcl",
-                "quantity",
-            ]:  # data is a list of floats
-                floats = valueArray[~empty]
-                valueArray[~empty] = convertExcelFloat(floats).tolist()
-                financeData[itemKey] = valueArray
-            elif itemKey == "invoiceDates":  # data is a list of dates
-                values = valueArray.tolist()
-                financeData[itemKey] = []
-                for value in values:
-                    if value != "NA":
-                        financeData[itemKey] += [
-                            convertOrdinalToDate(convertExcelOrdinal(int(value)))
-                        ]
-                    else:
-                        financeData[itemKey] += [value]
-
-            else:  # unknown key
-                raise UserError(f"Unknown key {itemKey} in finance data sheet")
-        return Controller.sortFinanceData(financeData)
-
-    @staticmethod
-    def obtainFileFromResource(fileResource: FileResource) -> File:
-        """
-        Obtain file from params
-        """
-        file = None
-        try:
-            file = fileResource.file
-        except AttributeError:
-            raise UserError(f"No finance (*.xlsx) file found.")
-        return file
-
-    @staticmethod
-    def sortFinanceData(financeData: dict) -> dict:
-        """
-        sort by clients first then by date. This is also the structure of database
-        """
-        sortedFinanceData = {}
-        for client in financeData["availableClients"]:
-            sortedFinanceData[client] = {"availableInvoiceNumbers": []}
-        for i, client in enumerate(financeData["clients"]):
-            if client not in financeData["availableClients"]:
-                continue
-            date = financeData["invoiceDates"][i]
-            invoiceNumber = financeData["invoiceNumbers"][i]
-            sortedFinanceData[client][date] = {
-                "priceIncl": financeData["pricesIncl"][i],
-                "priceExcl": financeData["pricesExcl"][i],
-                "invoiceNumber": invoiceNumber,
-                "quantity": financeData["quantity"][i],
-                "description": financeData["description"][i],
-            }
-            if (
-                invoiceNumber
-                not in sortedFinanceData[client]["availableInvoiceNumbers"]
-            ):
-                sortedFinanceData[client]["availableInvoiceNumbers"].append(
-                    financeData["invoiceNumbers"][i]
-                )
-        clients = np.array(financeData["availableClients"])
-        sortedFinanceData["availableClients"] = clients[clients != "NA"].tolist()
-        clientNumbers = np.array(financeData["clientNumbers"])
-        sortedFinanceData["clientNumbers"] = clientNumbers[
-            clientNumbers != "NA"
-        ].tolist()
-
-        clientLegalContact = np.array(financeData["clientLegalContact"])
-        clientLegalContact = clientLegalContact[clientLegalContact != "NA"].tolist()
-        clientStreetAndNumber = np.array(financeData["clientStreetAndNumber"])
-        clientStreetAndNumber = clientStreetAndNumber[
-            clientStreetAndNumber != "NA"
-        ].tolist()
-        clientPostalCode = np.array(financeData["clientPostalCode"])
-        clientPostalCode = clientPostalCode[clientPostalCode != "NA"].tolist()
-        clientCity = np.array(financeData["clientCity"])
-        clientCity = clientCity[clientCity != "NA"].tolist()
-        clientEmail = np.array(financeData["clientEmail"])
-        clientEmail = clientEmail[clientEmail != "NA"].tolist()
-
-        clients = clients.tolist()
-        for client in sortedFinanceData["availableClients"]:
-            clientIndex = clients.index(client)
-            try:
-                sortedFinanceData[client]["legalContact"] = clientLegalContact[
-                    clientIndex
-                ]
-                sortedFinanceData[client]["streetAndNumber"] = clientStreetAndNumber[
-                    clientIndex
-                ]
-                sortedFinanceData[client]["postalCode"] = clientPostalCode[clientIndex]
-                sortedFinanceData[client]["city"] = clientCity[clientIndex]
-                sortedFinanceData[client]["email"] = clientEmail[clientIndex]
-            except IndexError:
-                UserMessage.warning(f"Client {client} is missing contact information")
-
-        return sortedFinanceData

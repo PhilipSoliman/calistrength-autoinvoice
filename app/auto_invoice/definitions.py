@@ -1,13 +1,14 @@
-import json
 from calendar import Calendar
 from calendar import month_name as MONTH_NAMES
 from datetime import date as Date
-from pprint import pprint
 
 import numpy as np
 from deep_translator import GoogleTranslator
-from viktor.core import File, Storage, UserMessage
+from viktor.api_v1 import FileResource
+from viktor.core import UserMessage
 from viktor.errors import InputViolation, UserError
+
+from app.auto_invoice.excel_reader import ExcelReader
 
 MONTH_NAMES = MONTH_NAMES[1:]  # month_names starts with empty string
 
@@ -19,14 +20,14 @@ MAX_YEARS = 10
 
 INVOICE_YEARS = [str(year) for year in range(START_YEAR, START_YEAR + MAX_YEARS)]
 
-ORDINAL_BASE_EXCEL = Date(1900, 1, 1).toordinal() - 2
-
 
 def getAvailableClients(params, **kwargs):
     """
     Get list of available clients from finance data
     """
-    if data := getFinanceDataAttributeFromStorage("availableClients"):
+    if data := getFinanceDataAttribute(
+        params.uploadStep.financeSheet, "availableClients"
+    ):
         return data
     return []
 
@@ -39,7 +40,7 @@ def getAvailableDates(params, **kwargs):
         UserMessage.info("Please specify a client to get available dates")
         dates = []
     else:
-        clientData = getFinanceDataAttributeFromStorage(client)
+        clientData = getFinanceDataAttribute(params.uploadStep.financeSheet, client)
         dates = [date for date in clientData]
     return dates
 
@@ -52,23 +53,22 @@ def getAvailablePeriods(params, **kwargs):
         UserMessage.info("Please specify a client to get available periods")
         periods = []
     else:
-        ordinals = getFinanceDataAttributeFromStorage(client).keys()
+        ordinals = getFinanceDataAttribute(
+            params.uploadStep.financeSheet, client
+        ).keys()
         list(map(int, ordinals))
     return periods
 
 
-def convertExcelOrdinal(excelDateNumber: int) -> int:
+def getFinanceDataAttribute(financeSheet: FileResource, key: str, **kwargs):
     """
-    Convert Excel date number to human readable date
+    Get finance data attributes from storage
     """
-    return excelDateNumber + ORDINAL_BASE_EXCEL
+    financeData = ExcelReader.readFinanceSheet(financeSheet)
 
-
-def convertOrdinalToDate(ordinal: int) -> str:
-    """
-    Convert ordinal to date
-    """
-    return Date.fromordinal(ordinal).strftime(r"%d/%m/%Y")
+    if data := financeData.get(key):
+        return data
+    raise UserWarning(f"Could not find {key} in finance data")
 
 
 def convertDateToOrdinal(date: str) -> str:
@@ -80,51 +80,13 @@ def convertDateToOrdinal(date: str) -> str:
     return Date(y, m, d).toordinal()
 
 
-def convertExcelFloat(excelFloat: np.ndarray) -> float:
-    """
-    convert Excel-style float to regular float
-    """
-    return np.char.replace(excelFloat, ",", ".").astype(np.float64)
-
-
-def getFinanceDataFromStorage() -> dict:
-    """
-    Get finance data from storage
-    """
-    storage = Storage()
-    if "financeData" not in storage.list(scope="entity"):
-        UserMessage.warning("Could not find finance data in storage")
-        return {}
-    financeDataFile = storage.get("financeData", scope="entity")
-    return json.loads(financeDataFile.getvalue())
-
-
-def getFinanceDataAttributeFromStorage(key: str) -> dict:
-    """
-    Get finance data attributes from storage
-    """
-    financeData = getFinanceDataFromStorage()
-    if (data := financeData.get(key)) is None:
-        UserMessage.warning(f"Could not find {key} in finance data")
-    return data
-
-
-def saveFinanceDataToStorage(financeData: dict) -> None:
-    """
-    Save finance data to storage
-    """
-    storage = Storage()
-    financeDataFile = File.from_data(json.dumps(financeData))
-    storage.set("financeData", data=financeDataFile, scope="entity")
-
-
 def getInvoiceYears(params, **kwargs) -> list[str]:
     """
     Get list of available invoice years
     """
     if (clientName := params.invoiceStep.get("clientName")) is None:
         return []
-    clientData = getFinanceDataAttributeFromStorage(clientName)
+    clientData = getFinanceDataAttribute(params.uploadStep.financeSheet, clientName)
     years = []
     if availableInvoiceNumbers := clientData.get("availableInvoiceNumbers"):
         for invoiceNumber in availableInvoiceNumbers:
@@ -165,8 +127,8 @@ def getInvoiceIndices(params, **kwargs) -> list[str]:
         return []
     periodNr = getPeriodNr(year, params.invoiceStep.get("invoicePeriod"))
     generalErroMsg = "Cannot find invoices"
-    clientData = getFinanceDataAttributeFromStorage(
-        params.invoiceStep.get("clientName")
+    clientData = getFinanceDataAttribute(
+        params.uploadStep.financeSheet, params.invoiceStep.get("clientName")
     )
     indices = []
     for invoiceNumber in clientData["availableInvoiceNumbers"]:
@@ -206,7 +168,7 @@ def checkInvoiceSetup(params, **kwargs) -> bool:
         return False
 
     # check if client exists in finance data
-    financeData = getFinanceDataFromStorage()
+    financeData = ExcelReader.readFinanceSheet(params.uploadStep.financeSheet)
     if (clientData := financeData.get(params.invoiceStep.clientName)) is None:
         UserMessage.warning("Client not found in finance data")
         return False
@@ -225,12 +187,12 @@ def getInvoicePeriodFromNumber(invoiceNumber: int) -> tuple[str, int]:
 
 
 def getInvoiceNumberFromPeriodAndIndex(
-    client: str, index: str, period: str, year: int
+    params, client: str, index: str, period: str, year: int
 ) -> int:
     """
     Get invoice number from period and year
     """
-    clientNumber = getClientNr(client)
+    clientNumber = getClientNr(params, client)
     periodNr = getPeriodNr(year, period)
     yearNr = getYearNr(year)
     return f"{clientNumber}.{index}.{periodNr}.{yearNr}"
@@ -241,20 +203,22 @@ def getavailableInvoiceNumbers(params, **kwargs) -> list[str]:
     Get list of available invoice numbers from finance data and given client
     """
     if (
-        clientData := getFinanceDataAttributeFromStorage(
-            params.invoiceStep.get("clientName")
+        clientData := getFinanceDataAttribute(
+            params.uploadStep.financeSheet, params.invoiceStep.get("clientName")
         )
     ) is not None:
         return clientData["availableInvoiceNumbers"]
     return []
 
 
-def getClientNr(clientName: str) -> str:
+def getClientNr(params, clientName: str) -> str:
     """
     Get client number
     """
-    clients = getFinanceDataAttributeFromStorage("availableClients")
-    numbers = getFinanceDataAttributeFromStorage("clientNumbers")
+    clients = getFinanceDataAttribute(
+        params.uploadStep.financeSheet, "availableClients"
+    )
+    numbers = getFinanceDataAttribute(params.uploadStep.financeSheet, "clientNumbers")
     return numbers[clients.index(clientName)]
 
 

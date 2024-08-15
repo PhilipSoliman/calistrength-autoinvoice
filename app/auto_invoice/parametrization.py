@@ -1,5 +1,4 @@
 from viktor.parametrization import (
-    ActionButton,
     DateField,
     DownloadButton,
     FileField,
@@ -31,9 +30,9 @@ class Parametrization(ViktorParametrization):
     uploadStep.financeSheet = FileField(
         "Finance (xlsx)", file_types=[".xlsx"], max_size=5_000_000
     )
-    uploadStep.updateFinanceDataButton = ActionButton(
-        "Update finance data", method="updateFinanceData"
-    )
+    # uploadStep.updateFinanceDataButton = ActionButton(
+    #     "Update finance data", method="updateFinanceData"
+    # )
 
     invoiceStep = Step("Genereer factuur", views=["viewInvoice"])
     invoiceStep.intro = Text(
@@ -86,10 +85,10 @@ class Parametrization(ViktorParametrization):
     invoiceStep.setupInvoiceButton = SetParamsButton(
         "Factuur opstellen", method="setupInvoice"
     )
-    invoiceStep.subheader1 = Text(r"## Opslaan \& downloaden" + "\n")
-    invoiceStep.saveInvoice = ActionButton(
-        "Factuur opslaan (database)", method="saveInvoice"
-    )
+    invoiceStep.subheader1 = Text(r"## Downloaden" + "\n")
+    # invoiceStep.saveInvoice = ActionButton(
+    #     "Factuur opslaan (database)", method="saveInvoice"
+    # )
     invoiceStep.downloadInvoicePDF = DownloadButton(
         "Factuur downloaden (pdf)", method="downloadInvoicePDF"
     )
