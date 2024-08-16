@@ -121,7 +121,7 @@ class Controller(ViktorController):
         """
         Render invoice using template with most up to date input
         """
-        template_path = pyutils.get_root() / "app" / "lib" / "invoice_template.docx"
+        template_path = pyutils.get_root() / "lib" / "invoice_template.docx"
         with open(template_path, "rb") as template:
             result = render_word_file(template, self.gatherInvoiceComponents(params))
         return result
