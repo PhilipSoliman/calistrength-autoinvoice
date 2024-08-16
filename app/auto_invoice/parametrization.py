@@ -30,10 +30,6 @@ class Parametrization(ViktorParametrization):
     uploadStep.financeSheet = FileField(
         "Finance (xlsx)", file_types=[".xlsx"], max_size=5_000_000
     )
-    # uploadStep.updateFinanceDataButton = ActionButton(
-    #     "Update finance data", method="updateFinanceData"
-    # )
-
     invoiceStep = Step("Genereer factuur", views=["viewInvoice"])
     invoiceStep.intro = Text(
         "# Factuur gegevens\nVul hieronder de gegevens in voor de factuur. De factuur wordt automatisch gegenereerd en kan vervolgens worden opgeslagen of bekeken."
@@ -57,18 +53,18 @@ class Parametrization(ViktorParametrization):
         visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurnummer"),
     )
     invoiceStep.invoiceYear = OptionField(
-        "Invoice year",
+        "Jaar",
         options=getInvoiceYears,
         visible=IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.invoicePeriod = OptionField(
-        "Invoice period",
+        "periode",
         options=getInvoicePeriods,
         visible=IsNotEqual(Lookup("invoiceStep.invoiceYear"), None)
         and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
     )
     invoiceStep.invoiceIndex = OptionField(
-        "Invoice index",
+        "Index",
         options=getInvoiceIndices,
         visible=IsNotEqual(Lookup("invoiceStep.invoicePeriod"), None)
         and IsEqual(Lookup("invoiceStep.searchMethod"), "Factuurperiode"),
@@ -86,9 +82,6 @@ class Parametrization(ViktorParametrization):
         "Factuur opstellen", method="setupInvoice"
     )
     invoiceStep.subheader1 = Text(r"## Downloaden" + "\n")
-    # invoiceStep.saveInvoice = ActionButton(
-    #     "Factuur opslaan (database)", method="saveInvoice"
-    # )
     invoiceStep.downloadInvoicePDF = DownloadButton(
         "Factuur downloaden (pdf)", method="downloadInvoicePDF"
     )

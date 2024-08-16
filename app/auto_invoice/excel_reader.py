@@ -94,10 +94,9 @@ class ExcelReader:
         """
         file = None
         try:
-            file = fileResource.file
+            return fileResource.file
         except AttributeError:
-            raise UserError(f"No finance (*.xlsx) file found.")
-        return file
+            UserMessage.warning(f"No finance (*.xlsx) file found.")
 
     @staticmethod
     def _sortFinanceData(financeData: dict) -> dict:
