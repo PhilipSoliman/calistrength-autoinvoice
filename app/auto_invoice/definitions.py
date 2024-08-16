@@ -50,25 +50,25 @@ def getAvailablePeriods(params, **kwargs):
     Get list of available periods from finance data and given client
     """
     if (client := params.invoiceStep.get("clientName")) is None:
-        UserMessage.info("Please specify a client to get available periods")
-        periods = []
-    else:
-        ordinals = getFinanceDataAttribute(
-            params.uploadStep.financeSheet, client
-        ).keys()
-        list(map(int, ordinals))
-    return periods
+        return []
+    if ordinals := getFinanceDataAttribute(
+        params.uploadStep.financeSheet, client
+    ).keys():
+        print(list(map(int, ordinals)))
+        return []
 
 
 def getFinanceDataAttribute(financeSheet: FileResource, key: str, **kwargs):
     """
     Get finance data attributes from storage
     """
+    if financeSheet is None:
+        return None
     financeData = ExcelReader.readFinanceSheet(financeSheet)
 
     if data := financeData.get(key):
         return data
-    raise UserWarning(f"Could not find {key} in finance data")
+    UserMessage.warning(f"Could not find {key} in finance data")
 
 
 def convertDateToOrdinal(date: str) -> str:
@@ -76,7 +76,6 @@ def convertDateToOrdinal(date: str) -> str:
     Convert date to ordinal
     """
     d, m, y = [int(i) for i in date.split("/")]
-    # y = getYearFromYearNr(y)
     return Date(y, m, d).toordinal()
 
 
