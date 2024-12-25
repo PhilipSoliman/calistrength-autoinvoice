@@ -163,32 +163,23 @@ class Controller(ViktorController):
                 currentPayment = {}
                 ordinal = convertDateToOrdinal(date)
                 if start <= ordinal <= end:
-                    # date
-                    currentPayment["date"] = date
-
-                    # quantity
+                    # extract payment data
                     quantity = float(data["quantity"])
-                    currentPayment["quantity"] = f"{quantity:.1f}"
-
-                    # exclusive price
                     priceExcl = float(data["priceExcl"]) / quantity
-                    currentPayment["price"] = f"{priceExcl:.2f}"
-
                     subtotal = quantity * priceExcl
-                    currentPayment["total"] = f"{subtotal:.2f}"
-
-                    # inclusive price
+                    if subtotal == 0:
+                        continue
                     priceIncl = float(data["priceIncl"])
-
-                    # taxrate
                     taxrate = (priceIncl - subtotal) / subtotal * 100
-                    currentPayment["taxRate"] = f"{taxrate:.0f}"
-
-                    # description
                     description = data["description"]
-                    currentPayment["description"] = description
 
                     # save current payment
+                    currentPayment["date"] = date
+                    currentPayment["quantity"] = f"{quantity:.1f}"
+                    currentPayment["price"] = f"{priceExcl:.2f}"
+                    currentPayment["total"] = f"{subtotal:.2f}"
+                    currentPayment["taxRate"] = f"{taxrate:.0f}"
+                    currentPayment["description"] = description
                     currentPayments.append(currentPayment)
 
                     # cumalatives
